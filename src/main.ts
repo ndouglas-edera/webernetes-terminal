@@ -718,7 +718,7 @@ async function initTerminalDemo() {
 
     "/etc/falco/config.d/falco-edera-config.yaml": FALCO_EDERA_CONFIG_YAML,
     "/etc/falco/rules.d/falco-edera-rules.yaml": FALCO_EDERA_RULES_YAML,
-    "/falco-edera-values.yaml": FALCO_HELM_VALUES_YAML,
+    "/etc/falco/falco-edera-values.yaml": FALCO_HELM_VALUES_YAML,
 
     "/storage/csi/csi-block-pvc.yaml": CSI_BLOCK_PVC_YAML_CONTENT,
     "/storage/csi/format-block-device.yaml": FORMAT_BLOCK_DEVICE_YAML_CONTENT,
