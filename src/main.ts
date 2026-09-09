@@ -8,7 +8,7 @@ class WebServerImage extends BaseImage {
 
   override async exec(
     ctx: ProcessContext,
-    argv: readonly string[],
+    _argv: readonly string[],
   ): Promise<number> {
     ctx.listenHttp(8080, async () => ({
       statusCode: 200,
@@ -133,14 +133,6 @@ interface ProtectWorkload {
   image: string;
   command: string[];
   sourcePodName?: string;
-}
-
-interface DemoStep {
-  id: string;
-  title: string;
-  description: string;
-  command: string;
-  optional?: boolean;
 }
 
 const NGINX_YAML_CONTENT = `apiVersion: v1
@@ -683,413 +675,113 @@ customRules:
         (proc.cmdline contains "http://" or proc.cmdline contains "https://")
 `;
 
-const PROTECT_DEMO_STEPS: DemoStep[] = [
-  {
-    id: "zone-launch",
-    title: "Create an isolated Edera zone",
-    description:
-      "Launch a lightweight Edera <code class='guide-code'>Zone</code>. The <code class='guide-code'>--wait</code> flag waits until the zone is <code class='guide-code'>READY</code>.",
-    command:
-      "protect zone launch -n test-zone --min-cpus 1 -C 2 -c 2 --wait",
-  },
-  {
-    id: "zone-list",
-    title: "Inspect the zone",
-    description:
-      "List the <code class='guide-code'>Zones</code> managed by Edera and inspect its networking information.",
-    command: "protect zone list",
-  },
-  {
-    id: "edera-runtimeclass-apply",
-    title: "Apply the Edera RuntimeClass",
-    description:
-      "Create the Edera <code class='guide-code'>RuntimeClass</code> so Kubernetes recognises the <code class='guide-code'>edera</code> runtime.",
-    command: "kubectl apply -f edera/runtimeclass-edera.yaml",
-  },
-  {
-    id: "edera-runtimeclass-list",
-    title: "Verify the Edera RuntimeClass",
-    description:
-      "List <code class='guide-code'>RuntimeClass</code> names and confirm that <code class='guide-code'>edera</code> is available.",
-    command: "kubectl get runtimeclass",
-  },
-  {
-    id: "edera-node-label",
-    title: "Label the Edera node",
-    description:
-      "Label <code class='guide-code'>node-3</code> with <code class='guide-code'>runtime=edera</code>. The Edera <code class='guide-code'>RuntimeClass</code> uses this node selector to schedule Edera-protected workloads onto the correct node.",
-    command: "kubectl label node node-3 runtime=edera",
-  },
-  {
-    id: "edera-pod-apply",
-    title: "Deploy the CPU-configured Edera pod",
-    description:
-      "Apply the <code class='guide-code'>nginx</code> manifest. It uses <code class='guide-code'>runtimeClassName: edera</code> and requests 4 CPUs with the matching <code class='guide-code'>dev.edera/cpu</code> annotation.",
-    command: "kubectl apply -f edera/pod-nginx.yaml",
-  },
-  {
-    id: "edera-pod-runtimeclass",
-    title: "Verify the pod RuntimeClass",
-    description:
-      "Confirm that the <code class='guide-code'>edera-protect-pod</code> is using the Edera <code class='guide-code'>RuntimeClass</code>.",
-    command: "kubectl get pod edera-protect-pod -o jsonpath='{.spec.runtimeClassName}'",
-  },
-  {
-    id: "edera-workload-list",
-    title: "Prove the pod is Edera protected",
-    description:
-      "List the Edera workloads and verify <code class='guide-code'>edera-protect-pod</code> appears as a running workload attached to <code class='guide-code'>test-zone</code>.",
-    command: "protect workload list",
-  },
-  {
-    id: "deployment-apply",
-    title: "Deploy an Edera-backed Deployment",
-    description:
-      "Apply an <code class='guide-code'>apps/v1</code> Deployment with two <code class='guide-code'>nginx</code> replicas. The pod template uses <code class='guide-code'>runtimeClassName: edera</code>, so both replicas remain <code class='guide-code'>Pending</code> until the Edera <code class='guide-code'>RuntimeClass</code> is available.",
-    command: "kubectl apply -f edera/nginx-deployment.yaml",
-  },
-  {
-    id: "deployment-list",
-    title: "Inspect the Deployment",
-    description:
-      "List the Deployment and verify its two replicas become <code class='guide-code'>READY</code> once the Edera <code class='guide-code'>RuntimeClass</code> is enabled.",
-    command: "kubectl get deployments",
-  },
-  {
-    id: "workload-launch",
-    title: "Launch a workload inside the zone",
-    description:
-      "Start an Alpine container inside the isolated <code class='guide-code'>test-zone</code>.",
-    command:
-      "protect workload launch --zone test-zone --name alpine-long -- docker.io/library/alpine:latest sleep 3600",
-  },
-  {
-    id: "workload-list",
-    title: "Inspect the workload",
-    description:
-      "List workloads and see which Edera zone contains the Alpine container.",
-    command: "protect workload list",
-  },
-  {
-    id: "workload-exec",
-    title: "Verify the Edera zone kernel",
-    description:
-      "Exec into the <code class='guide-code'>Alpine</code> workload and run <code class='guide-code'>uname -r | grep 'edera'</code>. Expected output: <code class='guide-code'>6.18.44-edera-zone</code>. This demonstrates that the workload is using the dedicated kernel booted for the isolated Edera <code class='guide-code'>Zone</code> rather than the shared host kernel. In a traditional container, <code class='guide-code'>uname -r</code> would normally report the host kernel because containers share one kernel.",
-    command:
-      "protect workload exec alpine-long /bin/sh -c \"uname -r | grep 'edera'\"",
-    optional: true,
-  },
-  {
-    id: "host-kernel",
-    title: "Compare the host kernel",
-    description:
-      "After exiting the workload, run <code class='guide-code'>uname -r</code> on the host. Expected output: <code class='guide-code'>6.18.44-edera-host</code>. The different kernel suffix proves the workload is not using the host's shared kernel; the Edera <code class='guide-code'>Zone</code> is running its own isolated kernel in the simulator.",
-    command: "uname -r",
-    optional: true,
-  },
-  {
-    id: "workload-destroy",
-    title: "Destroy the workload",
-    description:
-      "Remove the workload from the Edera <code class='guide-code'>Zone</code>.",
-    command: "protect workload destroy alpine-long --wait",
-  },
-  {
-    id: "zone-destroy",
-    title: "Destroy the zone",
-    description:
-      "Tear down the isolated Edera <code class='guide-code'>Zone</code>.",
-    command: "protect zone destroy test-zone",
-  },
-  {
-    id: "final-list",
-    title: "Verify the zone lifecycle",
-    description:
-      "List the <code class='guide-code'>Zones</code> one final time and observe the destroyed tombstone.",
-    command: "protect zone list",
-  },
-];
-
 async function initTerminalDemo() {
+  const app = document.querySelector<HTMLDivElement>("#app");
 
-  const app = document.querySelector<HTMLDivElement>("#app")!;
+  if (!app) {
+    throw new Error("Missing #app element");
+  }
+
+  // This entry point is intentionally terminal-only so it can be embedded
+  // directly in documentation or loaded inside an iframe.
+  document.documentElement.style.background = "#ffffff";
+  document.body.style.margin = "0";
+  document.body.style.background = "#ffffff";
 
   app.innerHTML = `
-    <div class="demo-shell">
-
-      <header class="top-header">
-        <a href="https://edera.dev" class="logo-link">EDERA</a>
-        <div>
-          <h1>Webernetes × Edera</h1>
-          <p>Secure workload execution, directly in your browser.</p>
-        </div>
-      </header>
-
-      <section class="brand-hero" aria-labelledby="hero-title">
-        <div class="hero-eyebrow">ARE YOU READY TO CYW?</div>
-        <h2 id="hero-title">CONTAIN YOUR<br />WORKLOADS</h2>
-        <p>
-          Edera is the secure execution platform for all software — built so every
-          untrusted workload runs trusted, and free to move at the speed of your business.
-        </p>
-        <button id="hero-run-btn" class="hero-cta" type="button">Try it Out</button>
-      </section>
-
-      <div class="demo-kicker">Web­ernetes × Edera - interactive isolation demo</div>
-
-      <div class="dashboard-grid">
-
-        <div class="panel" id="pods-panel">
-          <div class="panel-header">
-            <span class="drag-handle">⋮⋮</span>
-            <h3>📦 Active Pods</h3>
-            <span id="pod-count" class="panel-count">0 Pods</span>
-            <button class="hide-btn" id="hide-pods-btn">Hide</button>
-          </div>
-          <div class="resource-body" id="pods-body">
-            <div id="pod-grid" class="resource-list"></div>
-          </div>
-        </div>
-
-        <div class="panel" id="nodes-panel">
-          <div class="panel-header">
-            <span class="drag-handle">⋮⋮</span>
-            <h3>🖥️ Active Nodes</h3>
-            <span id="node-count" class="panel-count">3 Nodes</span>
-            <button class="hide-btn" id="hide-nodes-btn">Hide</button>
-          </div>
-          <div class="resource-body" id="nodes-body">
-            <div id="node-grid" class="resource-list"></div>
-          </div>
-        </div>
-
-      </div>
-
-      <div class="panel protect-panel" id="protect-panel">
-        <div class="panel-header">
-          <span class="drag-handle">⋮⋮</span>
-          <div>
-            <h3>🛡️ Edera Zones</h3>
-            <div class="panel-subtitle">Simulated Edera isolation boundaries</div>
-          </div>
-          <span id="zone-count" class="panel-count">0 Zones</span>
-          <button class="hide-btn" id="hide-protect-btn">Hide</button>
-        </div>
-        <div class="protect-body" id="protect-body">
-          <div id="zone-grid"></div>
-        </div>
-      </div>
-
-      <div class="main-layout">
-
-        <div class="terminal-panel">
-          <div
-            id="output"
-            class="terminal-output"
-            aria-live="polite"
-          ></div>
-
-          <div class="terminal-input-row">
-            <span id="terminal-prompt">user@webernetes:~$</span>
-            <input
-              id="cmd"
-              type="text"
-              placeholder="Type 'help' or use Up/Down arrow keys for command history..."
-              disabled
-              autocomplete="off"
-              spellcheck="false"
-            />
-          </div>
-        </div>
-
-        <div class="panel events-panel" id="events-panel">
-          <div class="panel-header">
-            <span class="drag-handle">⋮⋮</span>
-            <h3>⚡ Lifecycle Events</h3>
-            <button class="hide-btn" id="clear-events-btn">Clear</button>
-            <button class="hide-btn" id="hide-events-btn">Hide</button>
-          </div>
-          <div id="events-stream" class="events-stream"></div>
-        </div>
-
-      </div>
-
-      <div class="guide-panel" id="guide-panel">
-
-        <div class="guide-header">
-          <span class="drag-handle">⋮⋮</span>
-          <div>
-            <div class="guide-title">🧭 Edera Demo Guide</div>
-            <div class="guide-subtitle">
-              Run each command below to walk through the isolation lifecycle
-            </div>
-          </div>
-
-          <div id="guide-progress" class="guide-progress"></div>
-
-          <button class="hide-btn" id="hide-guide-btn">Hide</button>
-        </div>
-
-        <div class="guide-body" id="guide-body">
-
-          <div class="guide-current">
-            <div class="guide-label">Suggested next command</div>
-            <div id="guide-step-title" class="guide-step-title"></div>
-            <div id="guide-description" class="guide-description"></div>
-
-            <div class="suggested-command">
-              <code id="suggested-command"></code>
-              <button id="use-command-btn" class="use-command-btn">
-                Use command
-              </button>
-            </div>
-          </div>
-
-          <div class="guide-side">
-            <div class="guide-side-title">Demo flow</div>
-            <div id="guide-step-list"></div>
-          </div>
-
-        </div>
-      </div>
-
-      <div class="edera-footer">
-        <img
-          src="https://docs.edera.dev/Ivy%20Headphones.png"
-          alt="Ivy from Edera"
-          loading="lazy"
+    <main class="terminal-only" aria-label="Webernetes terminal">
+      <div id="output" class="terminal-output" aria-live="polite"></div>
+      <div class="terminal-input-row">
+        <span id="terminal-prompt">user@webernetes:~$</span>
+        <input
+          id="cmd"
+          type="text"
+          disabled
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-label="Terminal input"
         />
-        <span>Made with love by the team at <a href="https://edera.dev/love" target="_blank" rel="noopener noreferrer">Edera</a></span>
       </div>
-
-      <!-- Lab completion modal -->
-      <div
-        id="completion-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="completion-title"
-        style="position:fixed;inset:0;z-index:1000;display:none;place-items:center;padding:24px;"
-      >
-        <div
-          id="completion-modal-backdrop"
-          aria-hidden="true"
-          style="position:absolute;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);"
-        ></div>
-        <div
-          style="position:relative;width:min(520px,100%);padding:42px;border:1px solid rgba(184,255,60,.35);border-radius:20px;background:#081716;box-shadow:0 24px 80px rgba(0,0,0,.5);text-align:center;"
-        >
-          <button
-            id="completion-close"
-            type="button"
-            aria-label="Close completion message"
-            style="position:absolute;top:12px;right:16px;border:0;background:transparent;color:#a8cfca;font-size:28px;line-height:1;cursor:pointer;"
-          >×</button>
-          <div style="width:64px;height:64px;margin:0 auto 20px;display:grid;place-items:center;border-radius:50%;background:#b8ff3c;color:#081716;font-size:32px;font-weight:800;">✓</div>
-          <div style="margin-bottom:10px;color:#00e5d4;font-size:12px;font-weight:800;letter-spacing:.16em;">LAB COMPLETE</div>
-          <h2 id="completion-title" style="margin:0 0 14px;color:#f8fffd;font-size:30px;">Thank you for completing the lab!</h2>
-          <p style="margin:0 0 28px;color:#a8cfca;line-height:1.6;">You've completed the Edera isolation walkthrough. Ready to try Edera for yourself?</p>
-          <div class="completion-actions">
-            <button id="restart-demo-btn" type="button" class="completion-restart-btn">Start a new session</button>
-            <a href="https://on.edera.dev" target="_blank" rel="noopener noreferrer" class="completion-license-link">Sign up for a free Edera license →</a>
-          </div>
-        </div>
-      </div>
-
-    </div>
+    </main>
   `;
+
+  // Override the legacy demo stylesheet for this terminal-only build.
+  const terminalStyle = document.createElement("style");
+  terminalStyle.textContent = `
+    html, body, #app {
+      background: #ffffff !important;
+      margin: 0 !important;
+      width: 100%;
+      min-height: 100%;
+    }
+
+    .terminal-only {
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
+      min-height: 400px;
+      padding: 20px;
+      background: #081716;
+      color: #dff7f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .terminal-only .terminal-output {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .terminal-only .terminal-input-row {
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+      margin-top: 12px;
+      color: #b8ff3c;
+    }
+
+    .terminal-only #cmd {
+      flex: 1 1 auto;
+      min-width: 0;
+      margin-left: 8px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #dff7f0;
+      font: inherit;
+    }
+
+    .terminal-only #cmd:disabled {
+      opacity: 0.65;
+    }
+
+    @media (max-width: 600px) {
+      .terminal-only {
+        min-height: 300px;
+        padding: 12px;
+        font-size: 12px;
+      }
+    }
+  `;
+  document.head.appendChild(terminalStyle);
 
   const output = document.querySelector<HTMLDivElement>("#output")!;
   const input = document.querySelector<HTMLInputElement>("#cmd")!;
-  const terminalPrompt =
-    document.querySelector<HTMLSpanElement>("#terminal-prompt")!;
+  const terminalPrompt = document.querySelector<HTMLSpanElement>("#terminal-prompt")!;
 
   const updateTerminalPrompt = () => {
     terminalPrompt.innerText = `user@webernetes:${virtualDisplayPath(currentDirectory)}$`;
   };
 
-  const podGrid = document.querySelector<HTMLDivElement>("#pod-grid")!;
-  const podCount = document.querySelector<HTMLSpanElement>("#pod-count")!;
-
-  const nodeGrid = document.querySelector<HTMLDivElement>("#node-grid")!;
-  const nodeCount = document.querySelector<HTMLSpanElement>("#node-count")!;
-
-  const zoneGrid = document.querySelector<HTMLDivElement>("#zone-grid")!;
-  const zoneCount = document.querySelector<HTMLSpanElement>("#zone-count")!;
-
-  const eventsStream =
-    document.querySelector<HTMLDivElement>("#events-stream")!;
-  const guideStepTitle =
-    document.querySelector<HTMLDivElement>("#guide-step-title")!;
-  const guideDescription =
-    document.querySelector<HTMLDivElement>("#guide-description")!;
-  const guideCodeStyle = document.createElement("style");
-  guideCodeStyle.textContent = `.guide-code { background: #fff3a3; font-weight: 700; padding: 0.08em 0.3em; border-radius: 4px; }`;
-  document.head.appendChild(guideCodeStyle);
-  const suggestedCommand =
-    document.querySelector<HTMLElement>("#suggested-command")!;
-  const guideStepList =
-    document.querySelector<HTMLDivElement>("#guide-step-list")!;
-  const guideProgress =
-    document.querySelector<HTMLDivElement>("#guide-progress")!;
-  const useCommandBtn =
-    document.querySelector<HTMLButtonElement>("#use-command-btn")!;
-  const rootShell =
-    document.querySelector<HTMLElement>(".demo-shell") || app;
-  const mainLayout =
-    document.querySelector<HTMLElement>(".main-layout")!;
-  const guidePanel =
-    document.querySelector<HTMLElement>("#guide-panel")!;
-  const eventsPanel =
-    document.querySelector<HTMLElement>("#events-panel")!;
-
-  const syncMobilePanelOrder = () => {
-    const isMobile = window.matchMedia("(max-width: 768px)").matches;
-
-    if (isMobile) {
-      if (eventsPanel.parentElement !== rootShell ||
-          eventsPanel.previousElementSibling !== guidePanel) {
-        rootShell.insertBefore(eventsPanel, guidePanel.nextSibling);
-      }
-    } else {
-      if (eventsPanel.parentElement !== mainLayout) {
-        mainLayout.appendChild(eventsPanel);
-      }
-    }
-  };
-
-  syncMobilePanelOrder();
-
-  const mobileLayoutMediaQuery = window.matchMedia("(max-width: 768px)");
-  const handleMobileLayoutChange = () => syncMobilePanelOrder();
-
-  if (typeof mobileLayoutMediaQuery.addEventListener === "function") {
-    mobileLayoutMediaQuery.addEventListener("change", handleMobileLayoutChange);
-  } else {
-    mobileLayoutMediaQuery.addListener(handleMobileLayoutChange);
-  }
-
-  window.addEventListener("resize", syncMobilePanelOrder);
-
-  const completionModal =
-    document.querySelector<HTMLDivElement>("#completion-modal")!;
-  const completionClose =
-    document.querySelector<HTMLButtonElement>("#completion-close")!;
-  const completionModalBackdrop =
-    document.querySelector<HTMLDivElement>("#completion-modal-backdrop")!;
-  const restartDemoBtn =
-    document.querySelector<HTMLButtonElement>("#restart-demo-btn")!;
-  let completionModalShown = false;
-
-  const closeCompletionModal = () => {
-    completionModal.hidden = true;
-    completionModal.style.display = "none";
-  };
-
   let cluster: Cluster;
 
-  // The demo exposes a small read-only virtual filesystem for manifests. Keeping
-  // paths here (rather than making the terminal itself aware of every manifest)
-  // lets `ls`, `cd`, `cat`, and `kubectl -f` all share the same path resolution.
   const localFiles: Record<string, string> = {
     "/edera/pod-nginx.yaml": NGINX_YAML_CONTENT,
     "/edera/runtimeclass-edera.yaml": RUNTIMECLASS_EDERA_YAML_CONTENT,
@@ -1382,32 +1074,6 @@ vfio_pci`;
   const formatVirtualDirectoryHeader = (directory: string) =>
     directory === "/" ? ".:" : `${virtualDisplayPath(directory)}:`;
 
-  const startNewDemoSession = () => {
-    completedDemoSteps = new Set<string>();
-    selectedDemoStepIndex = null;
-    completionModalShown = false;
-    commandHistory.length = 0;
-    historyIndex = -1;
-    protectZones = [];
-    protectWorkloads = [];
-    persistentVolumeClaims = [];
-    persistentVolumes = [];
-    jobs = [];
-    clusterEvents = [];
-    gpuVfioBound = false;
-    protectDaemonRestarted = false;
-    falcoInstalled = false;
-    falcoConfigured = false;
-    falcoRulesLoaded = false;
-    falcoRunning = false;
-    ederaFalcoPluginLoaded = false;
-    falcoLogLines = [];
-    falcoStreamMode = null;
-
-    closeCompletionModal();
-    window.location.reload();
-  };
-
   let gpuVfioBound = false;
   let protectDaemonRestarted = false;
   let falcoInstalled = false;
@@ -1515,42 +1181,6 @@ vfio_pci`;
   let clusterEvents: ClusterEvent[] = [];
   const commandHistory: string[] = [];
   let historyIndex = -1;
-  let completedDemoSteps = new Set<string>();
-  const REQUIRED_DEMO_STEP_IDS = PROTECT_DEMO_STEPS
-    .filter((step) => !step.optional)
-    .map((step) => step.id);
-
-  const isDemoComplete = (): boolean =>
-    REQUIRED_DEMO_STEP_IDS.every((stepId) =>
-      completedDemoSteps.has(stepId),
-    );
-
-  const showCompletionModal = () => {
-    if (completionModalShown || !isDemoComplete()) {
-      return;
-    }
-
-    completionModalShown = true;
-
-    completionModal.hidden = false;
-    completionModal.style.display = "grid";
-    completionClose.focus();
-  };
-
-  const hideCompletionModal = () => {
-    closeCompletionModal();
-  };
-
-  closeCompletionModal();
-  completionClose.addEventListener("click", hideCompletionModal);
-  completionModalBackdrop.addEventListener("click", hideCompletionModal);
-  restartDemoBtn.addEventListener("click", startNewDemoSession);
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !completionModal.hidden) {
-      hideCompletionModal();
-    }
-  });
-
   const escapeHtml = (str: string) =>
     str
       .replace(/&/g, "&amp;")
@@ -1606,47 +1236,6 @@ vfio_pci`;
       message,
     });
 
-    renderEvents();
-  };
-
-  const renderEvents = () => {
-    if (clusterEvents.length === 0) {
-      eventsStream.innerHTML = `
-        <div class="empty-state">
-          No lifecycle events captured yet.
-        </div>
-      `;
-      return;
-    }
-
-    eventsStream.innerHTML = clusterEvents
-      .map((ev) => {
-        const className =
-          ev.type === "Warning"
-            ? "warning event-warning"
-            : ev.type === "Info"
-              ? "info event-info"
-              : "event-normal";
-
-        return `
-          <div class="event-card ${className}">
-            <span class="event-time">${escapeHtml(ev.time)}</span>
-            <span class="event-badge">${ev.type.toUpperCase()}</span>
-
-            <div class="event-reason">
-              ${escapeHtml(ev.reason)}
-              <span class="event-object">
-                (${escapeHtml(ev.object)})
-              </span>
-            </div>
-
-            <div class="event-message">
-              ${escapeHtml(ev.message)}
-            </div>
-          </div>
-        `;
-      })
-      .join("");
   };
 
   const getNodeRoles = (node: LocalNode): string => {
@@ -1677,335 +1266,10 @@ vfio_pci`;
       .join(",");
   };
 
-  const renderPods = () => {
-    podCount.innerText =
-      `${pods.length} ${pods.length === 1 ? "Pod" : "Pods"}`;
+  // The dashboard, node/pod cards, zones panel, lifecycle-event panel, and guide
+  // are intentionally omitted from this build. Kubernetes state is still retained
+  // internally because the terminal commands depend on it.
 
-    if (pods.length === 0) {
-      podGrid.innerHTML = `
-        <div class="empty-state">No pods running</div>
-      `;
-      return;
-    }
-
-    podGrid.innerHTML = pods
-      .map((pod) => {
-        const pending = pod.status === "Pending";
-        const failed = pod.status === "Failed";
-        const cardStateClass = failed
-          ? "pending"
-          : pending
-            ? "pending"
-            : "running";
-
-        return `
-          <div class="resource-card ${cardStateClass}">
-            <div>
-              <div class="resource-name">
-                ${escapeHtml(pod.name)}
-                <span style="color:#a8cfca;font-weight:400;font-size:10px;">
-                  (${escapeHtml(pod.namespace)})
-                </span>
-              </div>
-
-              <div class="resource-meta">
-                ${escapeHtml(pod.image)} ·
-                ${escapeHtml(pod.node || "unassigned")}
-              </div>
-            </div>
-
-            <span class="status-badge ${
-              failed || pending ? "status-pending" : "status-ready"
-            }">
-              ${escapeHtml(pod.status)}
-            </span>
-          </div>
-        `;
-      })
-      .join("");
-  };
-
-const renderNodes = () => {
-  nodeCount.innerText =
-    `${nodes.length} ${nodes.length === 1 ? "Node" : "Nodes"}`;
-
-  if (nodes.length === 0) {
-    nodeGrid.innerHTML = `
-      <div class="empty-state">No nodes available</div>
-    `;
-    return;
-  }
-
-  nodeGrid.innerHTML = nodes
-    .map((node) => {
-      const usesEderaRuntime =
-        node.labels.runtime === "edera";
-
-      return `
-        <div class="resource-card">
-          <div>
-            <div class="resource-name">
-              <span>${escapeHtml(node.name)}</span>
-            </div>
-
-            <div class="resource-meta">
-              ${escapeHtml(getNodeRoles(node))}
-            </div>
-          </div>
-
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              flex-shrink: 0;
-            "
-          >
-            ${
-              usesEderaRuntime
-                ? `
-                  <span class="runtimeclass-badge">
-                    runtimeClassName: edera
-                  </span>
-                `
-                : ""
-            }
-
-            <span class="status-badge status-ready">
-              ${escapeHtml(node.status)}
-            </span>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-};
-  const renderProtectZones = () => {
-    zoneCount.innerText =
-      `${protectZones.length} ${protectZones.length === 1 ? "Zone" : "Zones"}`;
-
-    if (protectZones.length === 0) {
-      zoneGrid.innerHTML = `
-        <div class="empty-state">
-          No Edera zones have been launched.
-        </div>
-      `;
-      return;
-    }
-    zoneGrid.innerHTML = protectZones
-      .map((zone) => {
-        const workloadCount = protectWorkloads.filter(
-          (workload) => workload.zone === zone.uuid,
-        ).length;
-        const statusClass =
-          zone.state === "ready"
-            ? "status-ready"
-            : zone.state === "destroyed"
-              ? "status-destroyed"
-              : "status-pending";
-        const isDestroyed = zone.state === "destroyed";
-        return `
-          <div class="zone-card${isDestroyed ? " zone-card-destroyed" : ""}">
-            <div class="zone-top">
-              <div>
-                <div class="zone-name${isDestroyed ? " zone-name-destroyed" : ""}">
-                  🛡️ ${escapeHtml(zone.name)}
-                </div>
-
-                <div class="zone-uuid">
-                  ${escapeHtml(zone.uuid)}
-                </div>
-              </div>
-              <span class="status-badge ${statusClass}">
-                ${escapeHtml(zone.state)}
-              </span>
-            </div>
-            <div class="zone-meta">
-              <span>IPv4: ${escapeHtml(zone.ipv4 || "—")}</span>
-              <span>CPUs: ${zone.targetCpus}</span>
-              <span>Workloads: ${workloadCount}</span>
-            </div>
-          </div>
-        `;
-      })
-      .join("");
-  };
-  const updateDashboard = () => {
-    renderPods();
-    renderNodes();
-    renderProtectZones();
-  };
-  let selectedDemoStepIndex: number | null = null;
-  const getNextDemoStepIndex = (): number => {
-    const index = PROTECT_DEMO_STEPS.findIndex(
-      (step) => !completedDemoSteps.has(step.id),
-    );
-    return index === -1 ? PROTECT_DEMO_STEPS.length - 1 : index;
-  };
-  const getSelectedDemoStepIndex = (): number => {
-    if (
-      selectedDemoStepIndex !== null &&
-      selectedDemoStepIndex >= 0 &&
-      selectedDemoStepIndex < PROTECT_DEMO_STEPS.length
-    ) {
-      return selectedDemoStepIndex;
-    }
-    return getNextDemoStepIndex();
-  };
-  const selectDemoStep = (index: number) => {
-    if (index < 0 || index >= PROTECT_DEMO_STEPS.length) {
-      return;
-    }
-    selectedDemoStepIndex = index;
-    renderGuide();
-  };
-  const renderGuide = () => {
-    const currentIndex = getSelectedDemoStepIndex();
-    const currentStep = PROTECT_DEMO_STEPS[currentIndex];
-    guideProgress.innerHTML = PROTECT_DEMO_STEPS.map((step, index) => {
-      const done = completedDemoSteps.has(step.id);
-      const current = index === currentIndex && !done;
-      return `
-        <span
-          class="progress-dot ${
-            done ? "done" : current ? "current" : ""
-          }"
-          title="${escapeHtml(step.title)}"
-        ></span>
-      `;
-    }).join("");
-    guideStepTitle.innerHTML =
-      `${escapeHtml(currentStep.title)}${
-        currentStep.optional
-          ? `<span class="optional-badge">OPTIONAL</span>`
-          : ""
-      }`;
-    guideDescription.innerHTML = currentStep.description;
-    suggestedCommand.innerText = currentStep.command;
-    guideStepList.innerHTML = PROTECT_DEMO_STEPS.map((step, index) => {
-      const done = completedDemoSteps.has(step.id);
-      const current = index === currentIndex && !done;
-      const selected = index === currentIndex;
-      return `
-        <button
-          type="button"
-          class="guide-step-mini ${
-            done ? "done" : current ? "current" : ""
-          } ${selected ? "selected" : ""}"
-          data-step-index="${index}"
-          title="${escapeHtml(step.title)} — click to select this task"
-        >
-          <span class="mini-number">${index + 1}.</span>
-          <span>
-            ${escapeHtml(step.title)}
-            ${
-              step.optional
-                ? `<span class="optional-badge">optional</span>`
-                : ""
-            }
-          </span>
-        </button>
-      `;
-    }).join("");
-  };
-  const markDemoStepComplete = (stepId: string) => {
-    const wasComplete = isDemoComplete();
-    completedDemoSteps.add(stepId);
-    const selectedStep =
-      selectedDemoStepIndex === null
-        ? undefined
-        : PROTECT_DEMO_STEPS[selectedDemoStepIndex];
-    if (selectedStep === undefined || selectedStep.id === stepId) {
-      const nextIndex = PROTECT_DEMO_STEPS.findIndex(
-        (step) => !completedDemoSteps.has(step.id),
-      );
-      selectedDemoStepIndex =
-        nextIndex === -1 ? PROTECT_DEMO_STEPS.length - 1 : nextIndex;
-    }
-    renderGuide();
-    if (!wasComplete && isDemoComplete()) {
-      requestAnimationFrame(() => {
-        showCompletionModal();
-      });
-    }
-  };
-  guideStepList.addEventListener("click", (event) => {
-    const target = event.target as HTMLElement;
-    const button = target.closest<HTMLButtonElement>("button[data-step-index]");
-
-    if (!button) {
-      return;
-    }
-    const index = Number(button.dataset.stepIndex);
-    if (Number.isFinite(index)) {
-      selectDemoStep(index);
-    }
-  });
-  useCommandBtn.addEventListener("click", () => {
-    const index = getSelectedDemoStepIndex();
-    const step = PROTECT_DEMO_STEPS[index];
-    input.value = step.command;
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  });
-  document
-    .querySelector<HTMLButtonElement>("#hero-run-btn")!
-    .addEventListener("click", () => {
-      document
-        .querySelector<HTMLElement>("#guide-panel")!
-        .scrollIntoView({ behavior: "smooth", block: "start" });
-
-      input.focus();
-    });
-  const hidePanel = (
-    panelId: string,
-    bodyId: string,
-    buttonId: string,
-  ) => {
-    const panel = document.querySelector<HTMLElement>(panelId)!;
-    const body = document.querySelector<HTMLElement>(bodyId)!;
-    const button = document.querySelector<HTMLButtonElement>(buttonId)!;
-    let hidden = false;
-    button.addEventListener("click", () => {
-      hidden = !hidden;
-      body.style.display = hidden ? "none" : "";
-      button.innerText = hidden ? "Show" : "Hide";
-      if (hidden) {
-        panel.style.opacity = "0.65";
-      } else {
-        panel.style.opacity = "1";
-      }
-    });
-  };
-  hidePanel("#pods-panel", "#pods-body", "#hide-pods-btn");
-  hidePanel("#nodes-panel", "#nodes-body", "#hide-nodes-btn");
-  hidePanel("#protect-panel", "#protect-body", "#hide-protect-btn");
-  hidePanel("#guide-panel", "#guide-body", "#hide-guide-btn");
-  document
-    .querySelector<HTMLButtonElement>("#hide-events-btn")!
-    .addEventListener("click", () => {
-      const eventsPanel =
-        document.querySelector<HTMLElement>("#events-panel")!;
-
-      const stream =
-        document.querySelector<HTMLElement>("#events-stream")!;
-
-      const button =
-        document.querySelector<HTMLButtonElement>("#hide-events-btn")!;
-
-      const hidden = stream.style.display === "none";
-
-      stream.style.display = hidden ? "" : "none";
-      button.innerText = hidden ? "Hide" : "Show";
-      eventsPanel.style.opacity = hidden ? "1" : "0.65";
-    });
-
-  document
-    .querySelector<HTMLButtonElement>("#clear-events-btn")!
-    .addEventListener("click", () => {
-      clusterEvents = [];
-      renderEvents();
-    });
   const findSchedulableNode = (pod: LocalPod): LocalNode | undefined => {
     const effectiveNodeSelector: Record<string, string> = {
       ...(pod.nodeSelector || {}),
@@ -2095,7 +1359,6 @@ const renderNodes = () => {
       ).length;
     }
 
-    updateDashboard();
   };
 
   const reconcileDeployments = () => {
@@ -2152,7 +1415,6 @@ const renderNodes = () => {
     }
 
     syncEderaPodsToProtectWorkloads();
-    updateDashboard();
   };
   const nextZoneIp = () => {
     const used = new Set(
@@ -2214,7 +1476,6 @@ const renderNodes = () => {
       `Edera zone ${name} is ready`,
     );
     syncEderaPodsToProtectWorkloads();
-    updateDashboard();
     printHtml(
       `<span style="color:#b8ff3c;">${escapeHtml(uuid)}</span>`,
     );
@@ -2412,7 +1673,6 @@ const renderNodes = () => {
       );
     }
 
-    updateDashboard();
   };
 
   const launchProtectWorkload = (
@@ -2492,7 +1752,6 @@ const renderNodes = () => {
       `<span style="color:#b8ff3c;">${escapeHtml(uuid)}</span>`,
     );
 
-    updateDashboard();
   };
 
   const syncEderaPodsToProtectWorkloads = () => {
@@ -2560,7 +1819,6 @@ const renderNodes = () => {
       );
     }
 
-    updateDashboard();
   };
 
   const renderProtectWorkloadList = (workloads = protectWorkloads) => {
@@ -2664,7 +1922,6 @@ const renderNodes = () => {
       )}" destroyed.</span>`,
     );
 
-    updateDashboard();
   };
 
   const getFalcoZoneForWorkload = (workload: ProtectWorkload) =>
@@ -2983,6 +2240,10 @@ const renderNodes = () => {
     );
   };
 
+  // Commands still call this hook in the shared command engine. There is no
+  // guide UI in the terminal-only application, so progress is intentionally ignored.
+  const markDemoStepComplete = (_stepId: string): void => {};
+
   const formatHelpText = () => {
     return `
       <div class="cli-help">
@@ -2993,7 +2254,7 @@ const renderNodes = () => {
 
         <div class="cli-help-description">
           Explore the simulated Kubernetes cluster, local manifests, Edera zones,
-          and the terminal utilities available in this demo.
+          and the terminal utilities available in this browser environment.
         </div>
 
         <div class="cli-help-section">
@@ -3308,10 +2569,6 @@ const renderNodes = () => {
           </div>
         </div>
 
-        <div class="cli-help-tip">
-          Tip: use the Edera Demo Guide below the terminal to walk through
-          the isolation lifecycle step-by-step.
-        </div>
       </div>
     `;
   };
@@ -3461,10 +2718,6 @@ const renderNodes = () => {
           </div>
         </div>
 
-        <div class="cli-help-tip">
-          Tip: use the Edera Demo Guide below the terminal to walk through
-          the isolation lifecycle step-by-step.
-        </div>
       </div>
     `;
   };
@@ -3924,12 +3177,6 @@ const renderNodes = () => {
         if (output === "json" || output === "json-pretty") renderProtectWorkloadJson(workloads, output === "json-pretty");
         else renderProtectWorkloadList(workloads);
 
-        if (!completedDemoSteps.has("edera-workload-list")) {
-          markDemoStepComplete("edera-workload-list");
-        } else {
-          markDemoStepComplete("workload-list");
-        }
-
         if (protectWorkloads.some((workload) => workload.name === "workload-gpu")) {
           markDemoStepComplete("gpu-workload-list");
         }
@@ -4055,8 +3302,7 @@ const renderNodes = () => {
           addEvent("Normal", "WorkloadStarted", `workload/${workload.name}`, `Workload ${workload.name} started`);
           printHtml(`<span style="color:#b8ff3c;">Workload "${escapeHtml(workload.name)}" started.</span>`);
         }
-        updateDashboard();
-        return true;
+            return true;
       }
 
       if (subcommand === "destroy") {
@@ -4294,8 +3540,7 @@ Kernel isolation: enabled</span>`);
       );
 
       checkPendingPods();
-      updateDashboard();
-
+  
       printHtml(
         `<span style="color:#b8ff3c;">pod/${escapeHtml(
           podName,
@@ -4470,8 +3715,7 @@ Kernel isolation: enabled</span>`);
         addEvent("Normal", "Created", `deployment/${deploymentName}`, `deployment.apps/${deploymentName} created with ${deployment.volumeMode} storage`);
         checkPendingPods();
         deployment.readyReplicas = pods.filter((item) => item.ownerDeployment === deploymentName && item.status === "Running").length;
-        updateDashboard();
-        printHtml(`<span style="color:#b8ff3c;">deployment.apps/${deploymentName} created</span>`);
+            printHtml(`<span style="color:#b8ff3c;">deployment.apps/${deploymentName} created</span>`);
         return true;
       }
 
@@ -4523,8 +3767,7 @@ Kernel isolation: enabled</span>`);
         checkPendingPods();
         deployment.readyReplicas = pods.filter((pod) => pod.ownerDeployment === deploymentName && pod.status === "Running").length;
 
-        updateDashboard();
-        printHtml(`<span style="color:#b8ff3c;">deployment.apps/${deploymentName} created</span>`);
+            printHtml(`<span style="color:#b8ff3c;">deployment.apps/${deploymentName} created</span>`);
         markDemoStepComplete("deployment-apply");
         return true;
       }
@@ -4550,8 +3793,7 @@ Kernel isolation: enabled</span>`);
             existingPod.ip = "<none>";
             checkPendingPods();
             syncEderaPodsToProtectWorkloads();
-            updateDashboard();
-            printHtml(
+                    printHtml(
               `<span style="color:#b8ff3c;">pod/${escapeHtml(podName)} re-applied and recovered</span>`,
             );
           } else {
@@ -4592,8 +3834,7 @@ Kernel isolation: enabled</span>`);
         }
 
         checkPendingPods();
-        updateDashboard();
-
+    
         printHtml(
           `<span style="color:#b8ff3c;">pod/${podName} created</span>`,
         );
@@ -4610,21 +3851,21 @@ Kernel isolation: enabled</span>`);
         persistentVolumeClaims.splice(pvcIndex, 1);
         persistentVolumes = persistentVolumes.filter((pv) => pv.claimName !== `default/${pvcName}` && pv.name !== pvc.volumeName);
         addEvent("Normal", "Deleted", `persistentvolumeclaim/${pvcName}`, `persistentvolumeclaim/${pvcName} deleted`);
-        updateDashboard(); printHtml(`<span style="color:#b8ff3c;">persistentvolumeclaim/${pvcName} deleted</span>`); return true;
+        printHtml(`<span style="color:#b8ff3c;">persistentvolumeclaim/${pvcName} deleted</span>`); return true;
       }
 
       if (fileName === "format-block-device.yaml") {
         const index = jobs.findIndex((job) => job.name === "format-block-device");
         if (index < 0) { printHtml(`<span style="color:#a8cfca;">job.batch/format-block-device not found</span>`); return true; }
-        jobs.splice(index, 1); addEvent("Normal", "Deleted", "job/format-block-device", "Job format-block-device deleted"); updateDashboard(); printHtml(`<span style="color:#b8ff3c;">job.batch/format-block-device deleted</span>`); return true;
+        jobs.splice(index, 1); addEvent("Normal", "Deleted", "job/format-block-device", "Job format-block-device deleted"); printHtml(`<span style="color:#b8ff3c;">job.batch/format-block-device deleted</span>`); return true;
       }
 
       if (fileName === "local-nvme-pv.yaml") {
-        persistentVolumes = persistentVolumes.filter((pv) => pv.name !== "local-raw-pv"); updateDashboard(); printHtml(`<span style="color:#b8ff3c;">persistentvolume/local-raw-pv deleted</span>`); return true;
+        persistentVolumes = persistentVolumes.filter((pv) => pv.name !== "local-raw-pv"); printHtml(`<span style="color:#b8ff3c;">persistentvolume/local-raw-pv deleted</span>`); return true;
       }
 
       if (fileName === "local-nvme-pvc.yaml") {
-        persistentVolumeClaims = persistentVolumeClaims.filter((pvc) => pvc.name !== "local-block-pvc"); persistentVolumes = persistentVolumes.filter((pv) => pv.name !== "local-raw-pv"); updateDashboard(); printHtml(`<span style="color:#b8ff3c;">persistentvolumeclaim/local-block-pvc deleted</span>`); return true;
+        persistentVolumeClaims = persistentVolumeClaims.filter((pvc) => pvc.name !== "local-block-pvc"); persistentVolumes = persistentVolumes.filter((pv) => pv.name !== "local-raw-pv"); printHtml(`<span style="color:#b8ff3c;">persistentvolumeclaim/local-block-pvc deleted</span>`); return true;
       }
 
       if (fileName === "csi-block-deployment.yaml" || fileName === "filesystem-deployment.yaml" || fileName === "local-nvme-deployment.yaml") {
@@ -4632,7 +3873,7 @@ Kernel isolation: enabled</span>`);
         pods = pods.filter((pod) => pod.ownerDeployment !== "my-app");
         deployments = deployments.filter((deployment) => deployment.name !== "my-app");
         protectWorkloads = protectWorkloads.filter((workload) => !ownedPods.some((pod) => pod.name === workload.sourcePodName));
-        addEvent("Normal", "Deleted", "deployment/my-app", "deployment.apps/my-app deleted"); updateDashboard(); printHtml(`<span style="color:#b8ff3c;">deployment.apps/my-app deleted</span>`); return true;
+        addEvent("Normal", "Deleted", "deployment/my-app", "deployment.apps/my-app deleted"); printHtml(`<span style="color:#b8ff3c;">deployment.apps/my-app deleted</span>`); return true;
       }
 
       if (fileName === "runtimeclass-edera.yaml") {
@@ -4667,8 +3908,7 @@ Kernel isolation: enabled</span>`);
         for (const deployment of deployments) {
           deployment.readyReplicas = pods.filter((pod) => pod.ownerDeployment === deployment.name && pod.status === "Running").length;
         }
-        updateDashboard();
-
+    
         markDemoStepComplete("edera-runtimeclass-apply");
         return true;
       }
@@ -4696,8 +3936,7 @@ Kernel isolation: enabled</span>`);
             existingPod.ip = "<none>";
             checkPendingPods();
             syncEderaPodsToProtectWorkloads();
-            updateDashboard();
-            printHtml(
+                    printHtml(
               `<span style="color:#b8ff3c;">pod/${podName} re-applied and recovered</span>`,
             );
           } else {
@@ -4737,8 +3976,7 @@ Kernel isolation: enabled</span>`);
         }
 
         checkPendingPods();
-        updateDashboard();
-
+    
         printHtml(
           `<span style="color:#b8ff3c;">pod/${podName} created</span>`,
         );
@@ -5615,8 +4853,7 @@ Kernel isolation: enabled</span>`);
       bindStorage();
       checkPendingPods();
       for (const deployment of deployments) deployment.readyReplicas = pods.filter((pod) => pod.ownerDeployment === deployment.name && pod.status === "Running").length;
-      updateDashboard();
-      printHtml(`<span style="color:#b8ff3c;">job.batch/${escapeHtml(jobName)} condition met</span>`);
+        printHtml(`<span style="color:#b8ff3c;">job.batch/${escapeHtml(jobName)} condition met</span>`);
       return true;
     }
 
@@ -5674,8 +4911,7 @@ Kernel isolation: enabled</span>`);
         )} labeled</span>`,
       );
 
-      updateDashboard();
-
+  
       return true;
     }
     if (
@@ -5729,8 +4965,7 @@ Kernel isolation: enabled</span>`);
       );
 
       checkPendingPods();
-      updateDashboard();
-
+  
       if (
         node.name === "node-3" &&
         labelExpression === "runtime=edera"
@@ -5834,8 +5069,7 @@ Kernel isolation: enabled</span>`);
           );
         }
 
-        updateDashboard();
-        return true;
+            return true;
       }
 
       if (fileName === "nginx-deployment.yaml") {
@@ -5850,8 +5084,7 @@ Kernel isolation: enabled</span>`);
         deployments.splice(index, 1);
         protectWorkloads = protectWorkloads.filter((workload) => !ownedPods.some((pod) => pod.name === workload.sourcePodName));
         addEvent("Normal", "Deleted", `deployment/${deploymentName}`, `deployment.apps/${deploymentName} deleted`);
-        updateDashboard();
-        printHtml(`<span style="color:#b8ff3c;">deployment.apps/${deploymentName} deleted</span>`);
+            printHtml(`<span style="color:#b8ff3c;">deployment.apps/${deploymentName} deleted</span>`);
         return true;
       }
 
@@ -5904,8 +5137,7 @@ Kernel isolation: enabled</span>`);
           );
         }
 
-        updateDashboard();
-
+    
         printHtml(
           `<span style="color:#b8ff3c;">pod/${escapeHtml(
             deletedPod.name,
@@ -5993,8 +5225,7 @@ Kernel isolation: enabled</span>`);
         }
       }
 
-      updateDashboard();
-
+  
       printHtml(
         `<span style="color:#b8ff3c;">pod "${escapeHtml(
           podName,
@@ -6061,8 +5292,7 @@ Kernel isolation: enabled</span>`);
         deployment.readyReplicas = pods.filter((pod) => pod.ownerDeployment === deployment.name && pod.status === "Running").length;
       }
 
-      updateDashboard();
-
+  
       printHtml(
         `<span style="color:#b8ff3c;">node "${escapeHtml(
           nodeName,
@@ -6157,9 +5387,6 @@ Kernel isolation: enabled</span>`);
       setTimeout(resolve, 500),
     );
 
-    updateDashboard();
-    renderEvents();
-    renderGuide();
 
     output.innerHTML = `
       <div class="terminal-block">
@@ -6168,8 +5395,7 @@ Kernel isolation: enabled</span>`);
         </div>
 
         <div style="color:#a8cfca;margin-top:5px;">
-          Try the suggested Edera command below,
-          or type <span style="color:#b8ff3c;">help</span>.
+          Type <span style="color:#b8ff3c;">help</span> to see supported commands.
         </div>
       </div>
     `;
