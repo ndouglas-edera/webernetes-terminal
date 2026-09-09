@@ -165,7 +165,7 @@ input {
   margin: 0 0 18px;
   padding: 2px 0 0;
 
-  text-align: right;
+  text-align: left;
 }
 
 .terminal-only .terminal-output > .terminal-block:first-child > div:first-child {
@@ -339,7 +339,7 @@ input {
    ========================================================= */
 
 .cli-help {
-  margin: 2px 0 8px;
+  margin: 2px 0 0;
   padding: 4px 0;
 
   color: var(--edera-white);
@@ -556,6 +556,23 @@ input {
 .terminal-only a:hover {
   color: var(--edera-lime);
   text-decoration-color: var(--edera-lime);
+}
+
+/* =========================================================
+   Compact output endings
+   ========================================================= */
+
+/*
+  Keep the final line of command output close to the prompt.
+  This is especially noticeable with `help`, whose content is
+  made from several sections.
+*/
+.terminal-only .terminal-output > .terminal-block:last-child {
+  margin-bottom: 0;
+}
+
+.terminal-only .terminal-output .cli-help-section:last-child {
+  margin-bottom: 0;
 }
 
 /* =========================================================
