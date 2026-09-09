@@ -3,13 +3,16 @@
 :root {
   --edera-ink: #052f2d;
   --edera-deep: #003f3d;
+
   --edera-terminal: #081716;
   --edera-terminal-2: #012f2d;
 
   --edera-mint: #effffb;
   --edera-mint-2: #dff7f0;
+
   --edera-cyan: #00e5d4;
   --edera-lime: #b8ff3c;
+
   --edera-white: #f8fffd;
   --edera-text: #dff7f0;
   --edera-muted: #a8cfca;
@@ -45,18 +48,30 @@ html,
 body,
 #app {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+
   margin: 0;
-  background: #ffffff;
+  padding: 0;
+
+  background: var(--edera-terminal);
 }
 
 html {
-  min-height: 100%;
+  overflow: hidden;
+  background: var(--edera-terminal);
 }
 
 body {
+  overflow: hidden;
+
   color: var(--edera-text);
   font-family: var(--font-body);
+}
+
+#app {
+  overflow: hidden;
 }
 
 * {
@@ -74,12 +89,17 @@ input {
 
 .terminal-only {
   position: relative;
+  isolation: isolate;
+
   display: flex;
   flex-direction: column;
 
   width: 100%;
   height: 100vh;
-  min-height: 400px;
+  height: 100dvh;
+
+  min-width: 0;
+  min-height: 0;
 
   margin: 0;
   padding: 20px;
@@ -93,24 +113,23 @@ input {
     13px / 1.5
     var(--font-mono);
 
-  /*
-    A very restrained Edera accent:
-    thin cyan/lime rule at the top of the terminal.
-    No gradients, patterns, glow, or decorative background.
-  */
-  border-top: 2px solid var(--edera-cyan);
+  border-top:
+    2px solid var(--edera-cyan);
+
   box-shadow:
     inset 0 1px 0 rgba(184, 255, 60, 0.14);
 }
 
 /*
-  Small lime marker on the top edge.
-  This keeps a little Edera personality without turning
-  the terminal into a decorative dashboard.
+  Small lime marker on the terminal's top edge.
 */
+
 .terminal-only::before {
   content: "";
+
   position: absolute;
+  z-index: 1;
+
   top: -2px;
   right: 20px;
 
@@ -126,16 +145,28 @@ input {
    Terminal output
    ========================================================= */
 
+/*
+  The output is the flexible part of the terminal.
+
+  It fills all remaining vertical space between the top of
+  the terminal and the fixed input row at the bottom.
+
+  IMPORTANT:
+  There is deliberately no large top padding or margin here.
+*/
+
 .terminal-only .terminal-output {
   flex: 1 1 auto;
 
+  width: 100%;
   min-width: 0;
   min-height: 0;
 
+  margin: 0;
+  padding: 4px 4px 12px;
+
   overflow-x: hidden;
   overflow-y: auto;
-
-  padding: 8px 4px 12px;
 
   color: var(--edera-text);
 
@@ -143,7 +174,10 @@ input {
     13px / 1.5
     var(--font-mono);
 
+  text-align: left;
+
   white-space: normal;
+  overflow-wrap: anywhere;
 
   scrollbar-width: thin;
   scrollbar-color:
@@ -152,40 +186,15 @@ input {
 }
 
 /*
-  The initial cluster-status message is intentionally
-  positioned in the upper-right.
+  Every output block begins naturally at the top of the
+  output area.
 
-  Only the first output block gets this treatment.
-  Everything printed afterwards remains normal
-  left-aligned terminal output.
+  Do NOT vertically center output.
 */
+
 .terminal-only .terminal-output > .terminal-block:first-child {
-  width: 100%;
-
-  margin: 0 0 18px;
-  padding: 2px 0 0;
-
-  text-align: left;
-}
-
-.terminal-only .terminal-output > .terminal-block:first-child > div:first-child {
-  color: var(--edera-white) !important;
-
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.terminal-only .terminal-output > .terminal-block:first-child > div:last-child {
-  margin-top: 5px !important;
-
-  color: var(--edera-muted) !important;
-
-  font-size: 12px;
-}
-
-.terminal-only .terminal-output > .terminal-block:first-child > div:last-child span {
-  color: var(--edera-lime) !important;
-  font-weight: 700;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 /* =========================================================
@@ -193,17 +202,32 @@ input {
    ========================================================= */
 
 .terminal-block {
-  margin: 0 0 12px;
+  display: block;
+
   min-width: 0;
+
+  margin: 0 0 12px;
+  padding: 0;
+
+  color: var(--edera-text);
 }
 
+.terminal-block:last-child {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+   Command lines
+   ========================================================= */
+
 .terminal-command {
-  margin-bottom: 5px;
+  margin: 0 0 5px;
 
   color: var(--edera-text);
 
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .terminal-prompt {
@@ -211,20 +235,25 @@ input {
   font-weight: 700;
 }
 
+/* =========================================================
+   Preformatted command output
+   ========================================================= */
+
 .terminal-pre {
-  margin: 0;
-  padding: 0;
+  display: block;
 
   max-width: 100%;
+  min-width: 0;
+
+  margin: 0;
+  padding: 0;
 
   overflow-x: auto;
   overflow-y: hidden;
 
   color: var(--edera-text);
 
-  font:
-    inherit;
-
+  font: inherit;
   line-height: 1.42;
 
   white-space: pre;
@@ -239,14 +268,25 @@ input {
    Terminal input
    ========================================================= */
 
+/*
+  This row is deliberately NOT flexible.
+
+  The output consumes all spare vertical space, while this
+  row remains anchored to the bottom of the terminal.
+*/
+
 .terminal-only .terminal-input-row {
   display: flex;
   align-items: center;
 
   flex: 0 0 auto;
 
+  width: 100%;
+  min-width: 0;
+
   min-height: 56px;
-  margin-top: 8px;
+
+  margin: 8px 0 0;
   padding: 12px 4px 0;
 
   border-top:
@@ -262,18 +302,27 @@ input {
 .terminal-only .terminal-input-row > span {
   flex: 0 0 auto;
 
-  margin-right: 8px;
+  margin: 0 8px 0 0;
 
   color: var(--edera-cyan);
 
   font-weight: 700;
+
   white-space: nowrap;
 }
+
+/*
+  Command input.
+
+  No default browser margins, borders, or background.
+*/
 
 .terminal-only #cmd {
   flex: 1 1 auto;
 
+  width: auto;
   min-width: 0;
+
   height: 32px;
 
   margin: 0;
@@ -287,6 +336,8 @@ input {
 
   font:
     inherit;
+
+  line-height: 1.5;
 
   caret-color: var(--edera-lime);
 }
@@ -385,6 +436,7 @@ input {
   flex-direction: column;
 
   gap: 0;
+
   margin-bottom: 22px;
 }
 
@@ -412,6 +464,7 @@ input {
     minmax(180px, 1.1fr);
 
   gap: 24px;
+
   align-items: start;
 
   padding: 9px 10px;
@@ -511,14 +564,18 @@ input {
 }
 
 .zone-card-destroyed {
-  border: 1px solid var(--edera-danger);
-  box-shadow: 0 0 0 1px rgba(255, 115, 115, 0.12);
+  border:
+    1px solid var(--edera-danger);
+
+  box-shadow:
+    0 0 0 1px rgba(255, 115, 115, 0.12);
 }
 
 .zone-name-destroyed {
-  text-decoration: line-through;
+  text-decoration-line: line-through;
   text-decoration-thickness: 2px;
   text-decoration-color: var(--edera-danger);
+
   opacity: 0.7;
 }
 
@@ -528,45 +585,50 @@ input {
 
   padding: 4px 7px;
 
-  border: 1px solid #8ed14f;
+  border:
+    1px solid #8ed14f;
+
   border-radius: 999px;
 
-  background: rgba(184, 255, 60, 0.10);
-  color: #b8ff3c;
+  background:
+    rgba(184, 255, 60, 0.10);
+
+  color: var(--edera-lime);
 
   font:
     700 8px / 1
     var(--font-mono);
 
   letter-spacing: 0.05em;
+
   white-space: nowrap;
 }
 
 /* =========================================================
-   Links and interactive terminal output
+   Links
    ========================================================= */
 
 .terminal-only a {
   color: var(--edera-cyan);
+
   text-decoration: underline;
-  text-decoration-color: rgba(0, 229, 212, 0.35);
+  text-decoration-color:
+    rgba(0, 229, 212, 0.35);
+
   text-underline-offset: 2px;
 }
 
 .terminal-only a:hover {
   color: var(--edera-lime);
-  text-decoration-color: var(--edera-lime);
+
+  text-decoration-color:
+    var(--edera-lime);
 }
 
 /* =========================================================
-   Compact output endings
+   Output endings
    ========================================================= */
 
-/*
-  Keep the final line of command output close to the prompt.
-  This is especially noticeable with `help`, whose content is
-  made from several sections.
-*/
 .terminal-only .terminal-output > .terminal-block:last-child {
   margin-bottom: 0;
 }
@@ -581,9 +643,7 @@ input {
 
 @media (max-width: 720px) {
   .terminal-only {
-    min-height: 300px;
     padding: 14px;
-    border-top-width: 2px;
   }
 
   .terminal-only::before {
@@ -592,20 +652,14 @@ input {
   }
 
   .terminal-only .terminal-output {
-    padding: 6px 2px 10px;
+    padding: 4px 2px 10px;
+
     font-size: 12px;
-  }
-
-  .terminal-only .terminal-output > .terminal-block:first-child {
-    padding-top: 2px;
-  }
-
-  .terminal-only .terminal-output > .terminal-block:first-child > div:last-child {
-    font-size: 11px;
   }
 
   .terminal-only .terminal-input-row {
     min-height: 52px;
+
     margin-top: 6px;
     padding: 10px 2px 0;
 
@@ -622,6 +676,7 @@ input {
 
   .cli-help-command {
     grid-template-columns: 1fr;
+
     gap: 3px;
 
     padding: 9px 6px;
