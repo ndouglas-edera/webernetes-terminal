@@ -5394,9 +5394,9 @@ Kernel isolation: enabled</span>`);
           Webernetes cluster online!
         </div>-->
 
-        <div style="color:#a8cfca;margin-top:5px;">
+        <!--<div style="color:#a8cfca;margin-top:5px;">
           Type <span style="color:#b8ff3c;">help</span> to see supported commands.
-        </div>
+        </div>-->
       </div>
     `;
 
