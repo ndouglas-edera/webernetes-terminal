@@ -5390,9 +5390,9 @@ Kernel isolation: enabled</span>`);
 
     output.innerHTML = `
       <div class="terminal-block">
-        <div style="color:#f8fffd;">
+        <!--<div style="color:#f8fffd;">
           Webernetes cluster online!
-        </div>
+        </div>-->
 
         <div style="color:#a8cfca;margin-top:5px;">
           Type <span style="color:#b8ff3c;">help</span> to see supported commands.
