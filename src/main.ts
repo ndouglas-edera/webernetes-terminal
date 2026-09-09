@@ -682,12 +682,6 @@ async function initTerminalDemo() {
     throw new Error("Missing #app element");
   }
 
-  // This entry point is intentionally terminal-only so it can be embedded
-  // directly in documentation or loaded inside an iframe.
-  document.documentElement.style.background = "#ffffff";
-  document.body.style.margin = "0";
-  document.body.style.background = "#ffffff";
-
   app.innerHTML = `
     <main class="terminal-only" aria-label="Webernetes terminal">
       <div id="output" class="terminal-output" aria-live="polite"></div>
@@ -705,72 +699,6 @@ async function initTerminalDemo() {
       </div>
     </main>
   `;
-
-  // Override the legacy demo stylesheet for this terminal-only build.
-  const terminalStyle = document.createElement("style");
-  terminalStyle.textContent = `
-    html, body, #app {
-      background: #ffffff !important;
-      margin: 0 !important;
-      width: 100%;
-      min-height: 100%;
-    }
-
-    .terminal-only {
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      width: 100%;
-      height: 100vh;
-      min-height: 400px;
-      padding: 20px;
-      background: #081716;
-      color: #dff7f0;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .terminal-only .terminal-output {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow: auto;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .terminal-only .terminal-input-row {
-      display: flex;
-      align-items: center;
-      flex: 0 0 auto;
-      margin-top: 12px;
-      color: #b8ff3c;
-    }
-
-    .terminal-only #cmd {
-      flex: 1 1 auto;
-      min-width: 0;
-      margin-left: 8px;
-      border: 0;
-      outline: 0;
-      background: transparent;
-      color: #dff7f0;
-      font: inherit;
-    }
-
-    .terminal-only #cmd:disabled {
-      opacity: 0.65;
-    }
-
-    @media (max-width: 600px) {
-      .terminal-only {
-        min-height: 300px;
-        padding: 12px;
-        font-size: 12px;
-      }
-    }
-  `;
-  document.head.appendChild(terminalStyle);
 
   const output = document.querySelector<HTMLDivElement>("#output")!;
   const input = document.querySelector<HTMLInputElement>("#cmd")!;
