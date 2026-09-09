@@ -692,7 +692,7 @@ async function initTerminalDemo() {
     <main class="terminal-only" aria-label="Webernetes terminal">
       <div id="output" class="terminal-output" aria-live="polite"></div>
       <div class="terminal-input-row">
-        <span id="terminal-prompt">user@webernetes:~$</span>
+        <span id="terminal-prompt">root@edera:~$</span>
         <input
           id="cmd"
           type="text"
