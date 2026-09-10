@@ -1,5 +1,6 @@
 # webernetes-terminal
-A minimal, terminal-only view of "```my-webernetes-demo```"
+A minimal, terminal-only view of "```my-webernetes-demo```" <br/>
+https://ndouglas-edera.github.io/webernetes-terminal/
 
 ## Embed within docs as an <iframe>
 The browser loads the Webernetes application as a separate document. Its JavaScript runs in the ```<iframe>``` browser context, creates the in-browser Kubernetes cluster, and the docs page doesn't need to know anything about Webernetes. If the hosting configuration sends something like ```X-Frame-Options: DENY``` or complains about an incompatible CSP ```Content-Security-Policy: frame-ancestors 'none'``` the browser will refuse to display it.
