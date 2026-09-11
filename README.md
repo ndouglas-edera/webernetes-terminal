@@ -1,4 +1,4 @@
-# webernetes-terminal
+# Webernetes Terminal
 A minimal, terminal-only view of "```my-webernetes-demo```" <br/>
 https://ndouglas-edera.github.io/webernetes-terminal/
 
