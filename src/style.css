@@ -3,23 +3,17 @@
 :root {
   --edera-ink: #052f2d;
   --edera-deep: #003f3d;
-
   --edera-terminal: #081716;
   --edera-terminal-2: #012f2d;
-
   --edera-mint: #effffb;
   --edera-mint-2: #dff7f0;
-
   --edera-cyan: #00e5d4;
   --edera-lime: #b8ff3c;
-
   --edera-white: #f8fffd;
   --edera-text: #dff7f0;
   --edera-muted: #a8cfca;
-
   --edera-danger: #ff7373;
   --edera-warning: #ffd166;
-
   --edera-line: rgba(0, 229, 212, 0.18);
 
   --font-body:
@@ -38,11 +32,18 @@
     Monaco,
     Consolas,
     monospace;
-}
 
-/* =========================================================
-   Base
-   ========================================================= */
+  --font-grid:
+    ui-monospace,
+    SFMono-Regular,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+}
 
 html,
 body,
@@ -51,10 +52,8 @@ body,
   height: 100%;
   min-width: 0;
   min-height: 0;
-
   margin: 0;
   padding: 0;
-
   background: var(--edera-terminal);
 }
 
@@ -83,29 +82,19 @@ input {
   font: inherit;
 }
 
-/* =========================================================
-   Terminal shell
-   ========================================================= */
-
 .terminal-only {
   position: relative;
   isolation: isolate;
-
   display: flex;
   flex-direction: column;
-
   width: 100%;
   height: 100vh;
   height: 100dvh;
-
   min-width: 0;
   min-height: 0;
-
   margin: 0;
   padding: 20px;
-
   overflow: hidden;
-
   background: var(--edera-terminal);
   color: var(--edera-text);
 
@@ -120,105 +109,56 @@ input {
     inset 0 1px 0 rgba(184, 255, 60, 0.14);
 }
 
-/*
-  Small lime marker on the terminal's top edge.
-*/
-
 .terminal-only::before {
   content: "";
-
   position: absolute;
   z-index: 1;
-
   top: -2px;
   right: 20px;
-
   width: 52px;
   height: 2px;
-
   background: var(--edera-lime);
-
   pointer-events: none;
 }
 
-/* =========================================================
-   Terminal output
-   ========================================================= */
-
-/*
-  The output is the flexible part of the terminal.
-
-  It fills all remaining vertical space between the top of
-  the terminal and the fixed input row at the bottom.
-
-  IMPORTANT:
-  There is deliberately no large top padding or margin here.
-*/
-
 .terminal-only .terminal-output {
   flex: 1 1 auto;
-
   width: 100%;
   min-width: 0;
   min-height: 0;
-
   margin: 0;
   padding: 4px 4px 12px;
-
   overflow-x: hidden;
   overflow-y: auto;
-
   color: var(--edera-text);
-
   font:
     13px / 1.5
     var(--font-mono);
-
   text-align: left;
-
   white-space: normal;
   overflow-wrap: anywhere;
-
   scrollbar-width: thin;
   scrollbar-color:
     rgba(0, 229, 212, 0.25)
     transparent;
 }
 
-/*
-  Every output block begins naturally at the top of the
-  output area.
-
-  Do NOT vertically center output.
-*/
-
 .terminal-only .terminal-output > .terminal-block:first-child {
   margin-top: 0;
   padding-top: 0;
 }
 
-/* =========================================================
-   Generic output blocks
-   ========================================================= */
-
 .terminal-block {
   display: block;
-
   min-width: 0;
-
   margin: 0 0 12px;
   padding: 0;
-
   color: var(--edera-text);
 }
 
 .terminal-block:last-child {
   margin-bottom: 0;
 }
-
-/* =========================================================
-   Command lines
-   ========================================================= */
 
 .terminal-command {
   margin: 0 0 5px;
@@ -235,65 +175,52 @@ input {
   font-weight: 700;
 }
 
-/* =========================================================
-   Preformatted command output
-   ========================================================= */
-
 .terminal-pre {
   display: block;
-
   max-width: 100%;
   min-width: 0;
-
   margin: 0;
   padding: 0;
-
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
-
   color: var(--edera-text);
-
   font: inherit;
   line-height: 1.42;
-
-  white-space: pre;
-
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   scrollbar-width: thin;
   scrollbar-color:
     rgba(0, 229, 212, 0.22)
     transparent;
 }
 
-/* =========================================================
-   Terminal input
-   ========================================================= */
+.terminal-pre-grid {
+  overflow-x: auto;
 
-/*
-  This row is deliberately NOT flexible.
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
 
-  The output consumes all spare vertical space, while this
-  row remains anchored to the bottom of the terminal.
-*/
+.terminal-pre-box {
+  font-family: var(--font-grid);
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+}
 
 .terminal-only .terminal-input-row {
   display: flex;
   align-items: center;
-
   flex: 0 0 auto;
-
   width: 100%;
   min-width: 0;
-
   min-height: 56px;
-
   margin: 8px 0 0;
   padding: 12px 4px 0;
-
   border-top:
     1px solid rgba(0, 229, 212, 0.22);
-
   color: var(--edera-text);
-
   font:
     13px / 1.5
     var(--font-mono);
@@ -301,44 +228,26 @@ input {
 
 .terminal-only .terminal-input-row > span {
   flex: 0 0 auto;
-
   margin: 0 8px 0 0;
-
   color: var(--edera-cyan);
-
   font-weight: 700;
-
   white-space: nowrap;
 }
 
-/*
-  Command input.
-
-  No default browser margins, borders, or background.
-*/
-
 .terminal-only #cmd {
   flex: 1 1 auto;
-
   width: auto;
   min-width: 0;
-
   height: 32px;
-
   margin: 0;
   padding: 0;
-
   border: 0;
   outline: 0;
-
   background: transparent;
   color: var(--edera-white);
-
   font:
     inherit;
-
   line-height: 1.5;
-
   caret-color: var(--edera-lime);
 }
 
@@ -358,10 +267,6 @@ input {
 .terminal-only #cmd::placeholder {
   color: rgba(168, 207, 202, 0.48);
 }
-
-/* =========================================================
-   Scrollbars
-   ========================================================= */
 
 .terminal-only .terminal-output::-webkit-scrollbar,
 .terminal-only .terminal-pre::-webkit-scrollbar {
@@ -384,10 +289,6 @@ input {
 .terminal-only .terminal-pre::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 229, 212, 0.38);
 }
-
-/* =========================================================
-   CLI help
-   ========================================================= */
 
 .cli-help {
   margin: 2px 0 0;
@@ -527,10 +428,6 @@ input {
     var(--font-body);
 }
 
-/* =========================================================
-   Status / command output helpers
-   ========================================================= */
-
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -604,10 +501,6 @@ input {
   white-space: nowrap;
 }
 
-/* =========================================================
-   Links
-   ========================================================= */
-
 .terminal-only a {
   color: var(--edera-cyan);
 
@@ -625,10 +518,6 @@ input {
     var(--edera-lime);
 }
 
-/* =========================================================
-   Output endings
-   ========================================================= */
-
 .terminal-only .terminal-output > .terminal-block:last-child {
   margin-bottom: 0;
 }
@@ -636,10 +525,6 @@ input {
 .terminal-only .terminal-output .cli-help-section:last-child {
   margin-bottom: 0;
 }
-
-/* =========================================================
-   Responsive
-   ========================================================= */
 
 @media (max-width: 720px) {
   .terminal-only {
@@ -713,10 +598,6 @@ input {
     margin-right: 5px;
   }
 }
-
-/* =========================================================
-   Reduced motion
-   ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
   *,
