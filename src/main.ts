@@ -123,6 +123,15 @@ interface ProtectZone {
   targetCpus: number;
   device?: string;
   kernelVariant?: string;
+  // Fields below back the structured (`--output json|yaml|...`) renderings so
+  // that they stay stable across repeated `protect zone list` invocations.
+  domid?: number;
+  mac?: string;
+  minMemory?: number;
+  maxMemory?: number;
+  targetMemory?: number;
+  createdAt?: string;
+  readyAt?: string;
 }
 
 interface ProtectWorkload {
@@ -1100,6 +1109,17 @@ vfio_pci`;
     },
   ];
 
+  // Stable identity for the simulated Protect host. The real CLI reports the
+  // same host UUID and user agent for every zone on a given machine.
+  const PROTECT_HOST_ID = "2d31d52f-88b3-426a-bdf5-7248b834e396";
+  const PROTECT_USER_AGENT =
+    "edera-protect-ctl/0.0.0+sha.c92a5e2 tonic/0.14.6";
+  const PROTECT_ADDONS_IMAGE = "/var/lib/edera/protect/zone/addons.squashfs";
+
+  // Xen domain ids are handed out sequentially and never reused, so this is a
+  // monotonic counter rather than `protectZones.length`.
+  let nextProtectDomid = 1;
+
   let protectZones: ProtectZone[] = [];
   let protectWorkloads: ProtectWorkload[] = [];
   let cachedProtectImages = new Set<string>([
@@ -1366,6 +1386,24 @@ vfio_pci`;
     return `fdd4:1476:6c7e::${id}/48`;
   };
 
+  // The daemon reports RFC 3339 timestamps with nanosecond precision and an
+  // explicit `+00:00` offset. `Date` only gives milliseconds, so the remaining
+  // six digits are padded out.
+  const protectTimestamp = (date = new Date()): string => {
+    const nanos = String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
+    return date.toISOString().replace(/\.(\d{3})Z$/, `.$1${nanos}+00:00`);
+  };
+
+  // Locally administered unicast MAC, matching the addresses the zone
+  // interfaces actually get assigned.
+  const randomZoneMac = (): string => {
+    const bytes = Array.from({ length: 6 }, () =>
+      Math.floor(Math.random() * 256),
+    );
+    bytes[0] = (bytes[0] & 0xfe) | 0x02;
+    return bytes.map((byte) => byte.toString(16).padStart(2, "0")).join(":");
+  };
+
   const launchProtectZone = (
     name: string,
     minCpus = 1,
@@ -1373,6 +1411,9 @@ vfio_pci`;
     targetCpus = 2,
     device?: string,
     kernelVariant?: string,
+    minMemory = 512,
+    maxMemory = 1024,
+    targetMemory = 1024,
   ) => {
     const uuid = crypto.randomUUID();
     const zone: ProtectZone = {
@@ -1386,6 +1427,12 @@ vfio_pci`;
       targetCpus,
       device,
       kernelVariant,
+      domid: nextProtectDomid++,
+      mac: randomZoneMac(),
+      minMemory,
+      maxMemory,
+      targetMemory,
+      createdAt: protectTimestamp(),
     };
     protectZones.push(zone);
     addEvent(
@@ -1397,6 +1444,7 @@ vfio_pci`;
     zone.state = "ready";
     zone.ipv4 = nextZoneIp();
     zone.ipv6 = nextZoneIpv6();
+    zone.readyAt = protectTimestamp();
     addEvent(
       "Normal",
       "ZoneReady",
@@ -1408,6 +1456,299 @@ vfio_pci`;
       `<span style="color:#b8ff3c;">${escapeHtml(uuid)}</span>`,
     );
   };
+  // ---------------------------------------------------------------------
+  // Structured zone output
+  //
+  // The real `protect zone list` serialises one canonical zone record and
+  // then renders it through whichever formatter `--output` selects. The demo
+  // now does the same, so `--output json`, `--output yaml`, `--output tree`
+  // and friends all describe exactly the same object instead of each
+  // reinventing a different shape.
+  // ---------------------------------------------------------------------
+
+  const PROTECT_ZONE_STATE_ENUM: Record<ProtectZone["state"], string> = {
+    creating: "ZONE_STATE_CREATING",
+    ready: "ZONE_STATE_READY",
+    destroying: "ZONE_STATE_DESTROYING",
+    destroyed: "ZONE_STATE_DESTROYED",
+  };
+
+  // Zones created before these fields existed (or restored from an older
+  // session) get filled in once, so repeated listings stay identical.
+  const ensureZoneIdentity = (zone: ProtectZone): Required<
+    Pick<ProtectZone, "domid" | "mac" | "minMemory" | "maxMemory" | "targetMemory" | "createdAt">
+  > => {
+    if (zone.domid === undefined) {
+      zone.domid = nextProtectDomid++;
+    }
+    if (!zone.mac) {
+      zone.mac = randomZoneMac();
+    }
+    if (zone.minMemory === undefined) zone.minMemory = 512;
+    if (zone.maxMemory === undefined) zone.maxMemory = 1024;
+    if (zone.targetMemory === undefined) zone.targetMemory = zone.maxMemory;
+    if (!zone.createdAt) zone.createdAt = protectTimestamp();
+    if (!zone.readyAt && zone.state === "ready") {
+      zone.readyAt = zone.createdAt;
+    }
+
+    return {
+      domid: zone.domid,
+      mac: zone.mac,
+      minMemory: zone.minMemory,
+      maxMemory: zone.maxMemory,
+      targetMemory: zone.targetMemory,
+      createdAt: zone.createdAt,
+    };
+  };
+
+  // Keys are emitted in the same alphabetical order the daemon's protobuf-JSON
+  // serialiser uses, so `--output json` matches the real CLI byte for byte.
+  const buildProtectZoneRecord = (zone: ProtectZone): Record<string, unknown> => {
+    const identity = ensureZoneIdentity(zone);
+    const { domid, mac, minMemory, maxMemory, targetMemory, createdAt } = identity;
+
+    const initialResources = {
+      adjustmentPolicy: "ZONE_RESOURCE_ADJUSTMENT_POLICY_DYNAMIC",
+      maxCpus: zone.maxCpus,
+      maxMemory: String(maxMemory),
+      minCpus: zone.minCpus,
+      minMemory: String(minMemory),
+      targetCpus: zone.targetCpus,
+      targetMemory: String(targetMemory),
+    };
+
+    // After the balloon driver settles, a freshly booted zone sits at its
+    // memory floor rather than its requested target.
+    const activeResources = {
+      ...initialResources,
+      targetMemory: String(minMemory),
+    };
+
+    const ips: Record<string, string>[] = [];
+    if (zone.ipv4) {
+      ips.push({
+        address: zone.ipv4,
+        gateway: "10.75.0.1",
+        version: "ZONE_NETWORK_IP_VERSION_V4",
+      });
+    }
+    if (zone.ipv6) {
+      ips.push({
+        address: zone.ipv6,
+        gateway: "fdd4:1476:6c7e::1",
+        version: "ZONE_NETWORK_IP_VERSION_V6",
+      });
+    }
+
+    const spec: Record<string, unknown> = {
+      initialResources,
+      kernelOptions: zone.kernelVariant ? { variant: zone.kernelVariant } : {},
+      name: zone.name,
+      networkOptions: {},
+      virtualizationOptions: {
+        backend: "ZONE_VIRTUALIZATION_BACKEND_AUTOMATIC",
+        numaStrategy: "NUMA_STRATEGY_COMPACT",
+      },
+    };
+
+    if (zone.device) {
+      spec.devices = [{ name: zone.device }];
+    }
+
+    const status: Record<string, unknown> = {
+      createdAt,
+      deviceStatus: {
+        disks: [
+          {
+            filesystemType: "squashfs",
+            hostBlockDevice: `/dev/loop${10 + (domid - 1) * 2}`,
+            hostImageFile: PROTECT_ADDONS_IMAGE,
+            purpose: "ZONE_DISK_STATUS_DISK_PURPOSE_ADDONS",
+            zoneBlockDevice: "/dev/xvda",
+          },
+        ],
+        mount: {
+          deviceId: "6",
+          hostPath: `/var/lib/edera/protect/state/${zone.uuid}/mounts`,
+          tag: "shared",
+        },
+      },
+      domid,
+      host: PROTECT_HOST_ID,
+      networkStatus: {
+        interfaces: [
+          {
+            hostInterface: `vif${domid}.4`,
+            ips,
+            zoneInterface: "eth0",
+            zoneMac: mac,
+          },
+        ],
+      },
+    };
+
+    if (zone.readyAt) {
+      status.readyAt = zone.readyAt;
+    }
+
+    status.resourceStatus = { activeResources };
+    status.state = PROTECT_ZONE_STATE_ENUM[zone.state];
+
+    return {
+      id: zone.uuid,
+      origin: { userAgent: PROTECT_USER_AGENT },
+      spec,
+      status,
+    };
+  };
+
+  // --- serialisers -------------------------------------------------------
+
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+  // Quote anything that a YAML parser would otherwise read back as a number,
+  // boolean or null. This is why memory values come out as '1024'.
+  const formatYamlScalar = (value: unknown): string => {
+    if (value === null || value === undefined) return "null";
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+
+    const text = String(value);
+    const needsQuotes =
+      text === "" ||
+      /^(true|false|null|~|y|n|yes|no|on|off)$/i.test(text) ||
+      /^[-+]?(\d[\d_]*)?(\.\d*)?([eE][-+]?\d+)?$/.test(text) ||
+      /^0[xob]/i.test(text) ||
+      /^[-?:,[\]{}#&*!|>'"%@`]/.test(text) ||
+      /: /.test(text) ||
+      / #/.test(text) ||
+      /^\s|\s$/.test(text);
+
+    return needsQuotes ? `'${text.replace(/'/g, "''")}'` : text;
+  };
+
+  // Block-style YAML. Sequences nested under a mapping key are *not* indented
+  // relative to that key, which is what libyaml (and therefore the real CLI)
+  // emits.
+  const toYaml = (value: unknown, indent = 0): string => {
+    const pad = " ".repeat(indent);
+
+    if (Array.isArray(value)) {
+      if (!value.length) return `${pad}[]`;
+
+      return value
+        .map((item) => {
+          if (isPlainObject(item) || Array.isArray(item)) {
+            const body = toYaml(item, indent + 2);
+            return `${pad}- ${body.slice(indent + 2)}`;
+          }
+          return `${pad}- ${formatYamlScalar(item)}`;
+        })
+        .join("\n");
+    }
+
+    if (isPlainObject(value)) {
+      const entries = Object.entries(value);
+      if (!entries.length) return `${pad}{}`;
+
+      return entries
+        .map(([key, val]) => {
+          if (Array.isArray(val)) {
+            return val.length
+              ? `${pad}${key}:\n${toYaml(val, indent)}`
+              : `${pad}${key}: []`;
+          }
+          if (isPlainObject(val)) {
+            return Object.keys(val).length
+              ? `${pad}${key}:\n${toYaml(val, indent + 2)}`
+              : `${pad}${key}: {}`;
+          }
+          return `${pad}${key}: ${formatYamlScalar(val)}`;
+        })
+        .join("\n");
+    }
+
+    return `${pad}${formatYamlScalar(value)}`;
+  };
+
+  // Flatten to dotted paths for `--output key-value`.
+  const toKeyValueLines = (value: unknown, prefix = ""): string[] => {
+    if (Array.isArray(value)) {
+      if (!value.length) return [`${prefix}=[]`];
+      return value.flatMap((item, index) =>
+        toKeyValueLines(item, prefix ? `${prefix}.${index}` : String(index)),
+      );
+    }
+
+    if (isPlainObject(value)) {
+      const entries = Object.entries(value);
+      if (!entries.length) return [`${prefix}={}`];
+      return entries.flatMap(([key, val]) =>
+        toKeyValueLines(val, prefix ? `${prefix}.${key}` : key),
+      );
+    }
+
+    return [`${prefix}=${value === null || value === undefined ? "" : String(value)}`];
+  };
+
+  // Box-drawing tree for `--output tree`.
+  const toTreeLines = (value: unknown, prefix = ""): string[] => {
+    const entries: [string, unknown][] = Array.isArray(value)
+      ? value.map((item, index) => [String(index), item] as [string, unknown])
+      : Object.entries(value as Record<string, unknown>);
+
+    return entries.flatMap(([key, val], index) => {
+      const last = index === entries.length - 1;
+      const branch = last ? "└── " : "├── ";
+      const childPrefix = prefix + (last ? "    " : "│   ");
+
+      if (Array.isArray(val) || isPlainObject(val)) {
+        const empty = Array.isArray(val)
+          ? val.length === 0
+          : Object.keys(val).length === 0;
+        if (empty) {
+          return [`${prefix}${branch}${key}: ${Array.isArray(val) ? "[]" : "{}"}`];
+        }
+        return [`${prefix}${branch}${key}`, ...toTreeLines(val, childPrefix)];
+      }
+
+      return [`${prefix}${branch}${key}: ${val === null || val === undefined ? "" : String(val)}`];
+    });
+  };
+
+  // --- renderers ---------------------------------------------------------
+
+  const ZONE_TABLE_COLUMNS: {
+    header: string;
+    value: (zone: ProtectZone) => string;
+    colour?: (zone: ProtectZone) => string;
+  }[] = [
+    { header: "name", value: (zone) => zone.name },
+    { header: "uuid", value: (zone) => zone.uuid },
+    {
+      header: "state",
+      value: (zone) => zone.state,
+      colour: (zone) =>
+        zone.state === "ready"
+          ? "#b8ff3c"
+          : zone.state === "destroyed"
+            ? "#a8cfca"
+            : "#ffd166",
+    },
+    { header: "ipv4", value: (zone) => zone.ipv4 || "" },
+    { header: "ipv6", value: (zone) => zone.ipv6 || "" },
+  ];
+
+  const ZONE_TABLE_HINT = [
+    "# To view detailed zone information, use `--output` followed by a format specifier.",
+    "# e.g. `protect zone list --output yaml`",
+  ].join("\n");
+
+  // comfy-table's UTF8_FULL_CONDENSED preset: a solid outer frame, `┆` between
+  // columns, `╞═╡` under the header, and no separators between data rows.
   const renderProtectZoneList = (zones = protectZones) => {
     if (zones.length === 0) {
       printHtml(
@@ -1415,46 +1756,174 @@ vfio_pci`;
       );
       return;
     }
-    const nameWidth = 15;
-    const uuidWidth = 38;
-    const stateWidth = 13;
-    const ipv4Width = 18;
-    const header =
-      "NAME".padEnd(nameWidth) +
-      "UUID".padEnd(uuidWidth) +
-      "STATE".padEnd(stateWidth) +
-      "IPV4".padEnd(ipv4Width) +
-      "IPV6";
-    const divider =
-      "─".repeat(nameWidth) +
-      "─".repeat(uuidWidth) +
-      "─".repeat(stateWidth) +
-      "─".repeat(ipv4Width) +
-      "─".repeat(28);
 
-    let html = `<span style="color:#00e5d4;font-weight:700;">${header}</span>\n`;
-    html += `<span style="color:#08736d;">${divider}</span>\n`;
+    const widths = ZONE_TABLE_COLUMNS.map((column) =>
+      Math.max(
+        column.header.length,
+        ...zones.map((zone) => column.value(zone).length),
+      ) + 2,
+    );
+
+    const border = (left: string, mid: string, right: string, fill: string) =>
+      `<span style="color:#08736d;">${left}${widths
+        .map((width) => fill.repeat(width))
+        .join(mid)}${right}</span>`;
+
+    const cell = (text: string, width: number, colour?: string) => {
+      const padded = ` ${text.padEnd(width - 2)} `;
+      return colour
+        ? `<span style="color:${colour};">${escapeHtml(padded)}</span>`
+        : escapeHtml(padded);
+    };
+
+    const pipe = `<span style="color:#08736d;">│</span>`;
+    const inner = `<span style="color:#08736d;">┆</span>`;
+
+    const lines: string[] = [border("┌", "┬", "┐", "─")];
+
+    lines.push(
+      pipe +
+        ZONE_TABLE_COLUMNS.map((column, index) =>
+          `<span style="color:#00e5d4;font-weight:700;">${escapeHtml(
+            ` ${column.header.padEnd(widths[index] - 2)} `,
+          )}</span>`,
+        ).join(inner) +
+        pipe,
+    );
+
+    lines.push(border("╞", "╪", "╡", "═"));
 
     for (const zone of zones) {
-      const stateColor =
-        zone.state === "ready"
-          ? "#b8ff3c"
-          : zone.state === "destroyed"
-            ? "#a8cfca"
-            : "#ffd166";
-
-      html +=
-        `${escapeHtml(zone.name.padEnd(nameWidth))}` +
-        `${escapeHtml(zone.uuid.padEnd(uuidWidth))}` +
-        `<span style="color:${stateColor};">${escapeHtml(
-          zone.state.padEnd(stateWidth),
-        )}</span>` +
-        `${escapeHtml((zone.ipv4 || "").padEnd(ipv4Width))}` +
-        `${escapeHtml(zone.ipv6 || "")}` +
-        "\n";
+      lines.push(
+        pipe +
+          ZONE_TABLE_COLUMNS.map((column, index) =>
+            cell(column.value(zone), widths[index], column.colour?.(zone)),
+          ).join(inner) +
+          pipe,
+      );
     }
 
-    printPre(html.trimEnd());
+    lines.push(border("└", "┴", "┘", "─"));
+    lines.push("");
+    lines.push(
+      `<span style="color:#5f8d87;">${escapeHtml(ZONE_TABLE_HINT)}</span>`,
+    );
+
+    printPre(lines.join("\n"));
+  };
+
+  // Plain whitespace-delimited columns, no frame.
+  const renderProtectZoneSimple = (zones: ProtectZone[]) => {
+    if (!zones.length) {
+      printPre("");
+      return;
+    }
+
+    const widths = ZONE_TABLE_COLUMNS.map((column) =>
+      Math.max(
+        column.header.length,
+        ...zones.map((zone) => column.value(zone).length),
+      ),
+    );
+
+    const row = (cells: string[]) =>
+      cells
+        .map((text, index) =>
+          index === cells.length - 1 ? text : text.padEnd(widths[index] + 2),
+        )
+        .join("")
+        .trimEnd();
+
+    const lines = [
+      `<span style="color:#00e5d4;font-weight:700;">${escapeHtml(
+        row(ZONE_TABLE_COLUMNS.map((column) => column.header)),
+      )}</span>`,
+      ...zones.map((zone) =>
+        escapeHtml(row(ZONE_TABLE_COLUMNS.map((column) => column.value(zone)))),
+      ),
+    ];
+
+    printPre(lines.join("\n"));
+  };
+
+  const PROTECT_OUTPUT_FORMATS = [
+    "table",
+    "tree",
+    "json",
+    "json-pretty",
+    "jsonl",
+    "yaml",
+    "key-value",
+    "simple",
+  ];
+
+  const printProtectOutputFormatError = (format: string) => {
+    printPre(
+      `<span style="color:#ff7373;">${escapeHtml(
+        `error: invalid value '${format}' for '--output <OUTPUT>'\n  [possible values: ${PROTECT_OUTPUT_FORMATS.join(
+          ", ",
+        )}]`,
+      )}</span>\n${escapeHtml("\nFor more information, try '--help'.")}`,
+    );
+  };
+
+  const renderProtectZoneOutput = (zones: ProtectZone[], format: string) => {
+    const normalized = (format || "table").toLowerCase();
+    const records = zones.map(buildProtectZoneRecord);
+
+    switch (normalized) {
+      case "table":
+        renderProtectZoneList(zones);
+        return;
+
+      case "json":
+        printPre(escapeHtml(JSON.stringify(records)));
+        return;
+
+      case "json-pretty":
+        printPre(escapeHtml(JSON.stringify(records, null, 2)));
+        return;
+
+      case "jsonl":
+        printPre(
+          records.map((record) => escapeHtml(JSON.stringify(record))).join("\n"),
+        );
+        return;
+
+      case "yaml":
+        printPre(escapeHtml(records.length ? toYaml(records) : "[]"));
+        return;
+
+      case "key-value":
+        printPre(
+          records
+            .map((record) => escapeHtml(toKeyValueLines(record).join("\n")))
+            .join("\n\n"),
+        );
+        return;
+
+      case "tree":
+        printPre(
+          records
+            .map((record, index) =>
+              [
+                `<span style="color:#00e5d4;font-weight:700;">${escapeHtml(
+                  zones[index].name,
+                )}</span>`,
+                escapeHtml(toTreeLines(record).join("\n")),
+              ].join("\n"),
+            )
+            .join("\n\n"),
+        );
+        return;
+
+      case "simple":
+        renderProtectZoneSimple(zones);
+        return;
+
+      default:
+        printProtectOutputFormatError(format);
+    }
   };
 
   const destroyProtectZoneInstance = (zone: ProtectZone, wait = false) => {
@@ -2303,8 +2772,8 @@ vfio_pci`;
           </div>
 
           <div class="cli-help-command">
-            <code>protect zone list [ZONE] [--output json-pretty]</code>
-            <span>List Edera zones, or inspect one zone with JSON output.</span>
+            <code>protect zone list [ZONE] [--output &lt;FORMAT&gt;]</code>
+            <span>List Edera zones. Formats: table, tree, json, json-pretty, jsonl, yaml, key-value, simple.</span>
           </div>
 
           <div class="cli-help-command">
@@ -3241,21 +3710,6 @@ Options:
     return equalsToken ? equalsToken.split("=").slice(1).join("=") : "table";
   };
 
-  const renderProtectZoneJson = (zones: ProtectZone[], pretty = false) => {
-    const payload = {
-      zones: zones.map((zone) => ({
-        name: zone.name,
-        id: zone.uuid,
-        state: zone.state,
-        resources: { cpus: zone.targetCpus, memory: `${zone.maxCpus * 512}MB` },
-        ipv4: zone.ipv4,
-        ipv6: zone.ipv6,
-        ...(zone.kernelVariant ? { kernelVariant: zone.kernelVariant } : {}),
-      })),
-    };
-    printPre(escapeHtml(JSON.stringify(payload, null, pretty ? 2 : 0)));
-  };
-
   const renderProtectWorkloadJson = (workloads: ProtectWorkload[], pretty = false) => {
     const payload = {
       workloads: workloads.map((workload) => ({
@@ -3513,6 +3967,11 @@ Options:
         for (let i = 3; i < tokens.length; i++) {
           if (tokens[i] === "--selector" || tokens[i] === "-l") selector = tokens[++i] || "";
           else if (tokens[i].startsWith("--selector=")) selector = tokens[i].slice(11);
+          // `-o`/`--output` takes a value. Without skipping it the format name
+          // was picked up as a positional zone identifier, so `--output yaml`
+          // filtered the list down to a zone literally named "yaml" and
+          // printed nothing.
+          else if (tokens[i] === "-o" || tokens[i] === "--output") i++;
           else if (!tokens[i].startsWith("-") && !identifier) identifier = tokens[i];
         }
         let zones = identifier ? protectZones.filter((zone) => zone.name === identifier || zone.uuid === identifier) : [...protectZones];
@@ -3526,13 +3985,7 @@ Options:
           zones = zones.filter((zone) => zone.state === state);
         }
         const output = parseProtectOutputFormat(tokens);
-        if (output === "json" || output === "json-pretty") {
-          renderProtectZoneJson(zones, output === "json-pretty");
-        } else if (output === "jsonl") {
-          printPre(zones.map((zone) => escapeHtml(JSON.stringify({ name: zone.name, id: zone.uuid, state: zone.state }))).join("\n"));
-        } else {
-          renderProtectZoneList(zones);
-        }
+        renderProtectZoneOutput(zones, output);
 
         const hasDestroyedZone = protectZones.some(
           (zone) => zone.state === "destroyed",
