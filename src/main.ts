@@ -2501,7 +2501,684 @@ vfio_pci`;
     `;
   };
 
-  const formatProtectHelpText = () => {
+  const formatProtectCliHelp = (path: string[] = []) => {
+    const help: Record<string, string> = {
+      "": `Control the Edera Protect daemon
+
+Usage: protect [OPTIONS] <COMMAND>
+
+Commands:
+  zone                  Manage the zones on Edera Protect
+  workload              Manage the workloads on Edera Protect
+  image                 Manage the images on Edera Protect
+  network               Manage the network on Edera Protect
+  device                Manage the devices on Edera Protect
+  host                  Manage the host of Edera Protect
+  object-capability     Inspect and use object capabilities [alias: ocap]
+  completion            Output shell completion code for the specified shell
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -c, --connection <CONNECTION>
+      The connection URL to the Edera Protect daemon [default: unix:///var/lib/edera/protect/daemon.socket]
+
+      --user-agent <USER_AGENT>
+      User agent to connect to the daemon as [default: edera-protect-ctl/0.0.0+sha.c92a5e2]
+
+  -h, --help
+      Print help
+
+  -V, --version
+      Print version
+
+This CLI is under active development. Options and Commands are subject to change.`,
+
+      "zone": `Manage the zones on Edera Protect
+
+Usage: protect zone <COMMAND>
+
+Commands:
+  attach                Attach to the zone console
+  list                  List zone information
+  vcpu-list             Display information about a zone's vCPUs and their pinning
+  vcpu-pin              Set CPUs affinities for a zone vCPU
+  resolve               Resolve a zone name to matching zone ids
+  launch                Launch a new zone
+  destroy               Destroy a zone
+  suspend               Suspend a running zone
+  resume                Resume a suspended zone
+  fork                  Fork a running zone into a new memory-shared child zone
+  exec                  Execute a command inside the zone
+  forget                Forget destroyed zones (clear their tombstones)
+  logs                  View the logs of a zone
+  metrics               Read metrics from the zone
+  top                   Dashboard for running zones
+  watch                 Watch for zone changes
+  update-resources      Update the available resources to a zone
+  configure-network     Configure the network of an external network backend zone
+  advertise-service     Advertise a service in a zone
+  unadvertise-service   Unadvertise a service in a zone
+  kernel-events         Manage kernel events from zones
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "zone list": `List zone information
+
+Usage: protect zone list [OPTIONS] [ZONE]
+
+Arguments:
+  <ZONE>  Zone to list, either the name or the uuid
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "zone vcpu-list": `Display information about a zone's vCPUs and their pinning
+
+Usage: protect zone vcpu-list [OPTIONS] [ZONE]
+
+Arguments:
+  <ZONE>  Zone to list vCPUs for, either the name or the uuid
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "zone vcpu-pin": `Set CPUs affinities for a zone vCPU
+
+Usage: protect zone vcpu-pin <ZONE> <VCPU> <HARD_AFFINITY> [SOFT_AFFINITY]
+
+Arguments:
+  <ZONE>             Zone to set CPUs affinities for, either the name or the uuid
+  <VCPU>             The vCPU for which CPU affinities are set (values: "vCPU|all")
+  <HARD_AFFINITY>    Hard affinity (values: "Hard affinity|-|all")
+  <SOFT_AFFINITY>   Soft affinity (values: "Soft affinity|-|all")
+
+Options:
+  -h, --help         Print help`,
+
+      "zone resolve": `Resolve a zone name to matching zone ids
+
+Usage: protect zone resolve [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  The zone name to resolve
+
+Options:
+  -f, --first  If there are multiple matching zones, only print the first zone id
+  -h, --help   Print help`,
+
+      "zone launch": `Launch a new zone
+
+Usage: protect zone launch [OPTIONS] --name <NAME>
+
+Options:
+  -n, --name <NAME>              Name of the zone
+      --min-cpus <MIN_CPUS>      Minimum vCPUs available for the zone
+  -C, --max-cpus <MAX_CPUS>      Maximum vCPUs available for the zone
+  -c, --target-cpus <TARGET_CPUS>
+                                 Target vCPUs for the zone to use
+      --device <DEVICE>          Named PCI device to attach
+      --kernel-variant <KERNEL_VARIANT>
+                                 Named kernel variant to use
+  -h, --help                     Print help`,
+
+      "zone destroy": `Destroy a zone
+
+Usage: protect zone destroy [OPTIONS] <ZONE>
+
+Arguments:
+  <ZONE>  Zone to destroy, either the name or the uuid
+
+Options:
+  -W, --wait                  Wait for destruction to complete
+  -A, --all                   Destroy all matching zones
+  -l, --selector <SELECTOR>   Filter matches using a selector
+  -h, --help                  Print help`,
+
+      "zone suspend": `Suspend a running zone
+
+Usage: protect zone suspend <ZONE>
+
+Arguments:
+  <ZONE>  Zone to suspend, either the name or the uuid
+
+Options:
+  -h, --help  Print help`,
+
+      "zone resume": `Resume a suspended zone
+
+Usage: protect zone resume <ZONE>
+
+Arguments:
+  <ZONE>  Zone to resume, either the name or the uuid
+
+Options:
+  -h, --help  Print help`,
+
+      "zone fork": `Fork a running zone into a new memory-shared child zone
+
+Usage: protect zone fork [OPTIONS] <ZONE>
+
+Arguments:
+  <ZONE>  Zone to fork
+
+Options:
+  -n, --name <NAME>  Name of the child zone
+  -h, --help         Print help`,
+
+      "zone exec": `Execute a command inside the zone
+
+Usage: protect zone exec [OPTIONS] <ZONE> [COMMAND]...
+
+Arguments:
+  <ZONE>     Zone to exec inside, either the name or the uuid
+  <COMMAND>  Command to run inside the zone
+
+Options:
+  -t, --tty  Allocate a tty
+  -h, --help  Print help`,
+
+      "zone forget": `Forget destroyed zones (clear their tombstones)
+
+Usage: protect zone forget <ZONE>
+
+Arguments:
+  <ZONE>  Zone to forget
+
+Options:
+  -h, --help  Print help`,
+
+      "zone logs": `View the logs of a zone
+
+Usage: protect zone logs [OPTIONS] <ZONE>
+
+Arguments:
+  <ZONE>  Zone whose logs should be displayed
+
+Options:
+  -f, --follow  Follow the zone log
+  -h, --help    Print help`,
+
+      "zone metrics": `Read metrics from the zone
+
+Usage: protect zone metrics [OPTIONS] <ZONE>
+
+Arguments:
+  <ZONE>  Zone whose metrics should be displayed
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "zone top": `Dashboard for running zones
+
+Usage: protect zone top
+
+Options:
+  -h, --help  Print help`,
+
+      "zone watch": `Watch for zone changes
+
+Usage: protect zone watch
+
+Options:
+  -h, --help  Print help`,
+
+      "zone update-resources": `Update the available resources to a zone
+
+Usage: protect zone update-resources [OPTIONS] <ZONE>
+
+Arguments:
+  <ZONE>  Zone to update
+
+Options:
+  -h, --help  Print help`,
+
+      "zone configure-network": `Configure the network of an external network backend zone
+
+Usage: protect zone configure-network [OPTIONS] <ZONE>
+
+Arguments:
+  <ZONE>  Zone to configure
+
+Options:
+  -h, --help  Print help`,
+
+      "zone advertise-service": `Advertise a service in a zone
+
+Usage: protect zone advertise-service [OPTIONS] <ZONE> <NAME>
+
+Arguments:
+  <ZONE>  Zone to advertise from
+  <NAME>  Service name
+
+Options:
+  -h, --help  Print help`,
+
+      "zone unadvertise-service": `Unadvertise a service in a zone
+
+Usage: protect zone unadvertise-service <ZONE> <NAME>
+
+Arguments:
+  <ZONE>  Zone to unadvertise from
+  <NAME>  Service name
+
+Options:
+  -h, --help  Print help`,
+
+      "zone kernel-events": `Manage kernel events from zones
+
+Usage: protect zone kernel-events <COMMAND>
+
+Commands:
+  stream                Stream kernel events
+  list-syscalls         List available syscalls
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "workload": `Manage the workloads on Edera Protect
+
+Usage: protect workload <COMMAND>
+
+Commands:
+  launch                Launch a new workload
+  exec                  Execute a command inside the workload
+  attach                Attach to a workload console
+  resolve               Resolve a workload name to matching workload ids
+  start                 Start a workload
+  stop                  Stop a workload
+  destroy               Destroy a workload
+  list                  List workload information
+  watch                 Watch for workload changes
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "workload launch": `Launch a new workload
+
+Usage: protect workload launch [OPTIONS] --zone <ZONE> <OCI> [COMMAND]...
+
+Arguments:
+  <OCI>       Container image for zone to use
+  [COMMAND]... Command to run the workload
+
+Options:
+  --image-format <IMAGE_FORMAT>          Image format [default: squashfs] [possible values: squashfs]
+  --pull-overwrite-cache                 Overwrite image cache on pull
+  --pull-update                          Update image on pull
+  -n, --name <NAME>                      Name of the workload
+  -W, --wait                             Wait for the workload to be started
+  -t, --tty                              Allocate tty for the workload
+  --enable-spire-access                  Mount the SPIRE agent's Workload API socket into the workload
+  --enable-identity                      Have the zone agent fetch this workload's SVID
+  --ocap-priority <OCAP_PRIORITY>        Preference weight for a published capability
+  -z, --zone <ZONE>                      Zone to launch the workload in
+  -h, --help                             Print help`,
+
+      "workload exec": `Execute a command inside the workload
+
+Usage: protect workload exec [OPTIONS] <WORKLOAD> [COMMAND]...
+
+Arguments:
+  <WORKLOAD>  Workload to exec inside, either the name or the uuid
+  [COMMAND]   Command to run inside the zone
+
+Options:
+  -t, --tty  Allocate tty for the workload
+  -h, --help  Print help`,
+
+      "workload attach": `Attach to a workload console
+
+Usage: protect workload attach <WORKLOAD>
+
+Arguments:
+  <WORKLOAD>  Workload to attach to
+
+Options:
+  -h, --help  Print help`,
+
+      "workload resolve": `Resolve a workload name to matching workload ids
+
+Usage: protect workload resolve [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  The workload name to resolve
+
+Options:
+  -f, --first  If there are multiple matching workloads, only print the first workload id
+  -h, --help   Print help`,
+
+      "workload start": `Start a workload
+
+Usage: protect workload start <WORKLOAD>
+
+Arguments:
+  <WORKLOAD>  Workload to start
+
+Options:
+  -h, --help  Print help`,
+
+      "workload stop": `Stop a workload
+
+Usage: protect workload stop <WORKLOAD>
+
+Options:
+  -h, --help  Print help`,
+
+      "workload destroy": `Destroy a workload
+
+Usage: protect workload destroy [OPTIONS] <WORKLOAD>
+
+Options:
+  -W, --wait  Wait for the workload to be destroyed
+  -h, --help   Print help`,
+
+      "workload list": `List workload information
+
+Usage: protect workload list [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "workload watch": `Watch for workload changes
+
+Usage: protect workload watch
+
+Options:
+  -h, --help  Print help`,
+
+      "image": `Manage the images on Edera Protect
+
+Usage: protect image <COMMAND>
+
+Commands:
+  pull                  Pull an image into the cache
+  import                Import an image into the cache
+  remove                Remove an image from the cache
+  list                  List cached images
+  list-kernel-variants  List the named kernel variants the daemon can resolve
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "image pull": `Pull an image into the cache
+
+Usage: protect image pull [OPTIONS] <IMAGE>
+
+Arguments:
+  <IMAGE>  Image name
+
+Options:
+  -s, --image-format <IMAGE_FORMAT>  Image format [default: squashfs] [possible values: squashfs, tar, directory]
+  -n, --no-update                    Don't update from registry
+  -o, --overwrite-cache              Overwrite image cache
+  -U, --username <USERNAME>          Auth username
+  -P, --password <PASSWORD>          Auth registry password
+  -T, --registry-token <REGISTRY_TOKEN>
+                                      Auth registry token
+  --identity-token <IDENTITY_TOKEN>  Auth identity token
+  -h, --help                         Print help`,
+
+      "image import": `Import an image into the cache
+
+Usage: protect image import [OPTIONS] --digest <DIGEST> --image <IMAGE>
+
+Options:
+  --digest <DIGEST>  Image digest
+  --image <IMAGE>    Image reference
+  -h, --help         Print help`,
+
+      "image remove": `Remove an image from the cache
+
+Usage: protect image remove <IMAGE>
+
+Arguments:
+  <IMAGE>  Image reference or digest
+
+Options:
+  -h, --help  Print help`,
+
+      "image list": `List cached images
+
+Usage: protect image list [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "image list-kernel-variants": `List the named kernel variants the daemon can resolve
+
+Usage: protect image list-kernel-variants
+
+Options:
+  -h, --help  Print help`,
+
+      "network": `Manage the network on Edera Protect
+
+Usage: protect network <COMMAND>
+
+Commands:
+  reservation           Manage network reservations
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "network reservation": `Manage network reservations
+
+Usage: protect network reservation <COMMAND>
+
+Commands:
+  create                Create network reservation
+  destroy               Destroy network reservation
+  list                  List network reservation information
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "network reservation create": `Create network reservation
+
+Usage: protect network reservation create
+
+Options:
+  -h, --help  Print help`,
+
+      "network reservation destroy": `Destroy network reservation
+
+Usage: protect network reservation destroy <RESERVATION>
+
+Arguments:
+  <RESERVATION>  Reservation to destroy
+
+Options:
+  -h, --help     Print help`,
+
+      "network reservation list": `List network reservation information
+
+Usage: protect network reservation list [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "device": `Manage the devices on Edera Protect
+
+Usage: protect device <COMMAND>
+
+Commands:
+  list                  List device information
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "device list": `List device information
+
+Usage: protect device list [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "host": `Manage the host of Edera Protect
+
+Usage: protect host <COMMAND>
+
+Commands:
+  cpu-topology          Display information about the host CPU topology
+  resources             Get aggregate memory, CPU, and topology resources of the host
+  status                Get information about the host
+  control-snoop         Snoop on the Control API
+  idm-snoop             Snoop on the IDM bus
+  hv-console            Display hypervisor console output
+  hv-debug-info         Read hypervisor debug information
+  hv-zone-details       Display per-domain memory and resource usage from the hypervisor
+  spire-start           Launch a SPIRE server zone (the daemon runs the server using its [spire] config)
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "host cpu-topology": `Display information about the host CPU topology
+
+Usage: protect host cpu-topology [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value]
+  -h, --help             Print help`,
+
+      "host resources": `Get aggregate memory, CPU, and topology resources of the host
+
+Usage: protect host resources [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: simple]
+                         [possible values: simple, table, tree, json, json-pretty, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "host status": `Get information about the host
+
+Usage: protect host status [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: simple]
+                         [possible values: simple, table, tree, json, json-pretty, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "host control-snoop": `Snoop on the Control API
+
+Usage: protect host control-snoop [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: simple]
+                         [possible values: simple, table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  --filter-internals     Filters out user agents matching edera-protect-*, excluding the CLI
+  -h, --help             Print help`,
+
+      "host idm-snoop": `Snoop on the IDM bus
+
+Usage: protect host idm-snoop [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: simple]
+                         [possible values: simple, table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "host hv-console": `Display hypervisor console output
+
+Usage: protect host hv-console
+
+Options:
+  -h, --help  Print help`,
+
+      "host hv-debug-info": `Read hypervisor debug information
+
+Usage: protect host hv-debug-info
+
+Options:
+  -h, --help  Print help`,
+
+      "host hv-zone-details": `Display per-domain memory and resource usage from the hypervisor
+
+Usage: protect host hv-zone-details [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "host spire-start": `Launch a SPIRE server zone (the daemon runs the server using its [spire] config)
+
+Usage: protect host spire-start [OPTIONS]
+
+Options:
+  --pull-overwrite-cache
+  --pull-update
+  -n, --name <NAME>
+  --min-cpus <MIN_CPUS>       Minimum vCPUs available for the zone [default: 4]
+  -C, --max-cpus <MAX_CPUS>   Maximum vCPUs available for the zone [default: 4]
+  -c, --target-cpus <TARGET_CPUS>
+                              Target vCPUs for the zone to use [default: 1]
+  --cpus-hard-affinity <CPUS_HARD_AFFINITY>
+  --cpus-soft-affinity <CPUS_SOFT_AFFINITY>
+  -h, --help                  Print help`,
+
+      "object-capability": `Inspect and use object capabilities
+
+Usage: protect object-capability <COMMAND>
+
+Commands:
+  list                  List published object capabilities
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help            Print help`,
+
+      "object-capability list": `List published object capabilities
+
+Usage: protect object-capability list [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output format [default: table]
+                         [possible values: table, tree, json, json-pretty, jsonl, yaml, key-value, simple]
+  -h, --help             Print help`,
+
+      "completion": `Output shell completion code for the specified shell
+
+Usage: protect completion <SHELL>
+
+Arguments:
+  <SHELL>  [possible values: bash, elvish, fish, powershell, zsh]
+
+Options:
+  -h, --help  Print help`,
+    };
+
+    const key = path.join(" ");
+    return help[key] ?? help[""];
+  };
+
+  // The original rich, interactive help is intentionally preserved. It is
+  // available as `protect demo-help`, while the normal help flags mirror the
+  // real Edera Protect CLI hierarchy.
+  const formatProtectDemoHelpText = () => {
     return `
       <div class="cli-help">
         <div class="cli-help-header">
@@ -2517,135 +3194,42 @@ vfio_pci`;
 
         <div class="cli-help-section">
           <div class="cli-help-section-title">Zones</div>
-
-          <div class="cli-help-command">
-            <code>protect zone launch -n &lt;name&gt; [options]</code>
-            <span>Create a new isolated Edera zone.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect zone list [ZONE] [--output json-pretty]</code>
-            <span>List Edera zones, or inspect one zone with JSON output.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect zone watch</code>
-            <span>Watch simulated zone state changes in real time.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect zone destroy [OPTIONS] &lt;ZONE&gt;</code>
-            <span>Destroy a zone by name or UUID.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>-W, --wait</code>
-            <span>Wait for the destruction of the zone to complete.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>-A, --all</code>
-            <span>Destroy all zones matching the input.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>-l, --selector &lt;SELECTOR&gt;</code>
-            <span>Filter matches using the <code style="color:#b8ff3c;">status.state</code> field.</span>
-          </div>
+          <div class="cli-help-command"><code>protect zone launch -n &lt;name&gt; [options]</code><span>Create a new isolated Edera zone.</span></div>
+          <div class="cli-help-command"><code>protect zone list [ZONE] [--output json-pretty]</code><span>List Edera zones, or inspect one zone with JSON output.</span></div>
+          <div class="cli-help-command"><code>protect zone watch</code><span>Watch simulated zone state changes in real time.</span></div>
+          <div class="cli-help-command"><code>protect zone destroy [OPTIONS] &lt;ZONE&gt;</code><span>Destroy a zone by name or UUID.</span></div>
+          <div class="cli-help-command"><code>-W, --wait</code><span>Wait for the destruction of the zone to complete.</span></div>
+          <div class="cli-help-command"><code>-A, --all</code><span>Destroy all zones matching the input.</span></div>
+          <div class="cli-help-command"><code>-l, --selector &lt;SELECTOR&gt;</code><span>Filter matches using the <code style="color:#b8ff3c;">status.state</code> field.</span></div>
         </div>
 
         <div class="cli-help-section">
           <div class="cli-help-section-title">Workloads</div>
-
-          <div class="cli-help-command">
-            <code>protect workload launch --zone &lt;zone&gt; --name &lt;name&gt; &lt;image&gt; [command]</code>
-            <span>Start a workload inside an existing ready zone.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect workload list [--selector status.state=running]</code>
-            <span>List workloads and optionally filter them by state.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect workload stop &lt;workload&gt;</code>
-            <span>Stop a running workload.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect workload start &lt;workload&gt;</code>
-            <span>Start a stopped workload.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect workload exec &lt;workload&gt; &lt;command&gt;</code>
-            <span>Execute a command inside a running workload.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect workload destroy &lt;workload&gt; --wait</code>
-            <span>Remove a workload from its Edera zone.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect zone logs &lt;zone&gt;</code>
-            <span>Show simulated zone boot and NVIDIA driver logs.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect image list [--output json-pretty]</code>
-            <span>List cached container images.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect image pull [--overwrite-cache] &lt;image&gt;</code>
-            <span>Pull an image into the local cache.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect image remove &lt;digest&gt;</code>
-            <span>Remove a cached image by digest.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect image list-kernel-variants</code>
-            <span>List configured zone kernel variants and their resolved images.</span>
-          </div>
+          <div class="cli-help-command"><code>protect workload launch --zone &lt;zone&gt; --name &lt;name&gt; &lt;image&gt; [command]</code><span>Start a workload inside an existing ready zone.</span></div>
+          <div class="cli-help-command"><code>protect workload list [--selector status.state=running]</code><span>List workloads and optionally filter them by state.</span></div>
+          <div class="cli-help-command"><code>protect workload stop &lt;workload&gt;</code><span>Stop a running workload.</span></div>
+          <div class="cli-help-command"><code>protect workload start &lt;workload&gt;</code><span>Start a stopped workload.</span></div>
+          <div class="cli-help-command"><code>protect workload exec &lt;workload&gt; &lt;command&gt;</code><span>Execute a command inside a running workload.</span></div>
+          <div class="cli-help-command"><code>protect workload destroy &lt;workload&gt; --wait</code><span>Remove a workload from its Edera zone.</span></div>
+          <div class="cli-help-command"><code>protect zone logs &lt;zone&gt;</code><span>Show simulated zone boot and NVIDIA driver logs.</span></div>
+          <div class="cli-help-command"><code>protect image list [--output json-pretty]</code><span>List cached container images.</span></div>
+          <div class="cli-help-command"><code>protect image pull [--overwrite-cache] &lt;image&gt;</code><span>Pull an image into the local cache.</span></div>
+          <div class="cli-help-command"><code>protect image remove &lt;digest&gt;</code><span>Remove a cached image by digest.</span></div>
+          <div class="cli-help-command"><code>protect image list-kernel-variants</code><span>List configured zone kernel variants and their resolved images.</span></div>
         </div>
 
         <div class="cli-help-section">
           <div class="cli-help-section-title">GPU passthrough</div>
-
-          <div class="cli-help-command">
-            <code>--device gpu0</code>
-            <span>Attach the GPU named gpu0 in daemon.toml to a zone.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>--kernel-variant nvidia</code>
-            <span>Launch the NVIDIA-enabled zone kernel variant.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect workload exec &lt;workload&gt; nvidia-smi</code>
-            <span>Verify Tesla T4 access from inside a GPU workload.</span>
-          </div>
+          <div class="cli-help-command"><code>--device gpu0</code><span>Attach the GPU named gpu0 in daemon.toml to a zone.</span></div>
+          <div class="cli-help-command"><code>--kernel-variant nvidia</code><span>Launch the NVIDIA-enabled zone kernel variant.</span></div>
+          <div class="cli-help-command"><code>protect workload exec &lt;workload&gt; nvidia-smi</code><span>Verify Tesla T4 access from inside a GPU workload.</span></div>
         </div>
 
         <div class="cli-help-section">
           <div class="cli-help-section-title">Help</div>
-
-          <div class="cli-help-command">
-            <code>protect --help</code>
-            <span>Show this command reference.</span>
-          </div>
-
-          <div class="cli-help-command">
-            <code>protect -h</code>
-            <span>Alias for <code style="color:#b8ff3c;">protect --help</code>.</span>
-          </div>
+          <div class="cli-help-command"><code>protect --help</code><span>Show the real Edera Protect CLI help.</span></div>
+          <div class="cli-help-command"><code>protect demo-help</code><span>Show this richer Webernetes demonstration reference.</span></div>
         </div>
-
       </div>
     `;
   };
@@ -2761,14 +3345,35 @@ vfio_pci`;
     if (tokens[0] !== "protect") {
       return false;
     }
-    if (
-      tokens.length === 1 ||
-      tokens[1] === "--help" ||
-      tokens[1] === "-h"
-    ) {
-      printHtml(formatProtectHelpText());
-
+    // Mirror the real Edera CLI's help routing. `protect`, `protect -h`,
+    // and `protect --help` all show the authentic top-level help. A help
+    // flag after a command shows that command's corresponding help page.
+    const helpIndex = tokens.findIndex(
+      (token, index) => index > 0 && (token === "--help" || token === "-h"),
+    );
+    if (tokens.length === 1 || helpIndex >= 0) {
+      const helpPath = tokens.slice(1, helpIndex >= 0 ? helpIndex : tokens.length);
+      printPre(escapeHtml(formatProtectCliHelp(helpPath)));
       return true;
+    }
+
+    // Preserve the original rich demonstration help without making it the
+    // canonical CLI help output.
+    if (tokens[1] === "demo-help") {
+      printHtml(formatProtectDemoHelpText());
+      return true;
+    }
+
+    // `help` is a real clap subcommand. `protect help <path...>` behaves like
+    // asking for --help on that command.
+    if (tokens[1] === "help") {
+      printPre(escapeHtml(formatProtectCliHelp(tokens.slice(2))));
+      return true;
+    }
+
+    if (tokens[1] === "ocap") {
+      tokens = [...tokens];
+      tokens[1] = "object-capability";
     }
 
     if (tokens[1] === "image") {
@@ -3292,7 +3897,7 @@ Kernel isolation: enabled</span>`);
     }
 
     printHtml(
-      `<span style="color:#ff7373;">Unknown protect command. Type "protect --help".</span>`,
+      `<span style="color:#ff7373;">Unknown protect command. Type "protect --help". For the interactive Webernetes reference, use "protect demo-help".</span>`,
     );
 
     return true;
