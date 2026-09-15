@@ -1158,8 +1158,41 @@ vfio_pci`;
     output.scrollTop = output.scrollHeight;
   };
 
+  // Frame characters: the vertical and junction box-drawing glyphs that have
+  // to line up with the text columns around them. A lone horizontal rule
+  // under a header does not, so it is deliberately not in this set.
+  const BOX_FRAME_CHARS = /[\u2502\u2503\u2506\u250A\u250C-\u254B\u2550-\u256C]/;
+
+  // A non-space followed by two or more spaces is column padding, i.e. output
+  // that would be ruined by soft wrapping.
+  const COLUMN_PADDING = /\S {2,}\S/;
+
+  const stripTags = (html: string) => html.replace(/<[^>]*>/g, "");
+
+  /*
+    Output falls into three buckets:
+
+      - free-flowing text, which wraps at the right-hand column the way a real
+        terminal does (this is what `--output json` needs: it is one very long
+        line and used to run off the edge of the embed);
+      - column-aligned text, which must not reflow, so it scrolls instead;
+      - box-drawn frames, which additionally need a font that actually ships
+        U+2500 glyphs so the borders line up with the cells.
+  */
+  const preClassName = (htmlContent: string): string => {
+    const text = stripTags(htmlContent);
+
+    if (BOX_FRAME_CHARS.test(text)) {
+      return "terminal-pre terminal-pre-grid terminal-pre-box";
+    }
+    if (COLUMN_PADDING.test(text)) {
+      return "terminal-pre terminal-pre-grid";
+    }
+    return "terminal-pre";
+  };
+
   const printPre = (htmlContent: string) => {
-    printHtml(`<pre class="terminal-pre">${htmlContent}</pre>`);
+    printHtml(`<pre class="${preClassName(htmlContent)}">${htmlContent}</pre>`);
   };
 
   const printCommand = (command: string) => {
