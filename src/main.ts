@@ -1109,12 +1109,29 @@ vfio_pci`;
     },
   ];
 
-  // Stable identity for the simulated Protect host. The real CLI reports the
-  // same host UUID and user agent for every zone on a given machine.
+  // Stable identity and host metadata for the simulated Protect host. These
+  // values mirror the host information exposed by `protect host status` in the
+  // reference terminal, rather than reporting zone/workload counts. Zone and
+  // workload state are exposed by their respective commands.
   const PROTECT_HOST_ID = "2d31d52f-88b3-426a-bdf5-7248b834e396";
   const PROTECT_USER_AGENT =
     "edera-protect-ctl/0.0.0+sha.c92a5e2 tonic/0.14.6";
   const PROTECT_ADDONS_IMAGE = "/var/lib/edera/protect/zone/addons.squashfs";
+
+  const PROTECT_HOST_STATUS = {
+    uuid: PROTECT_HOST_ID,
+    domain: 0,
+    version: "0.0.0+sha.c92a5e2",
+    branch: "HEAD",
+    lastTag: "v1.11.0",
+    revisionsSinceTag: 181,
+    gitSha1: "c92a5e2b2f63028b021627b62931be89754830f0",
+    ipv4: "10.75.0.1/16",
+    ipv6: "fdd4:1476:6c7e::1/48",
+    ethernetAddress: "d6:52:b4:13:49:a1",
+    hypervisorFreeMemory: 3238346752,
+    hypervisorFreeMemoryMiB: 3088,
+  } as const;
 
   // Xen domain ids are handed out sequentially and never reused, so this is a
   // monotonic counter rather than `protectZones.length`.
@@ -4357,9 +4374,91 @@ Options:
     if (tokens[1] === "host") {
       const subcommand = tokens[2];
       if (subcommand === "status") {
-        printPre(`<span style="color:#dff7f0;">protect-daemon    active (running)
-zones             ${protectZones.filter((zone) => zone.state !== "destroyed").length}
-workloads         ${protectWorkloads.filter((workload) => workload.state !== "destroyed").length}</span>`);
+        const host = PROTECT_HOST_STATUS;
+        const output = parseProtectOutputFormat(tokens);
+
+        // `protect host status` is host information. It should not be replaced
+        // with a summary of the simulated daemon/zones/workloads; those are
+        // separate resources in the Protect CLI.
+        const simple = [
+          `Host UUID: ${host.uuid}`,
+          `Host Domain: ${host.domain}`,
+          `Protect Version: ${host.version}`,
+          `Protect built from branch: ${host.branch}`,
+          `Protect last tag: ${host.lastTag}`,
+          `Protect revisions since tag: ${host.revisionsSinceTag}`,
+          `Protect git SHA-1: ${host.gitSha1}`,
+          `Host IPv4: ${host.ipv4}`,
+          `Host IPv6: ${host.ipv6}`,
+          `Host Ethernet Address: ${host.ethernetAddress}`,
+          `Hypervisor Free Memory: ${host.hypervisorFreeMemory} (${host.hypervisorFreeMemoryMiB} MiB)`,
+        ].join("\n");
+
+        if (output === "json" || output === "json-pretty") {
+          const payload = {
+            hostUuid: host.uuid,
+            hostDomain: host.domain,
+            protectVersion: host.version,
+            protectBuiltFromBranch: host.branch,
+            protectLastTag: host.lastTag,
+            protectRevisionsSinceTag: host.revisionsSinceTag,
+            protectGitSha1: host.gitSha1,
+            hostIpv4: host.ipv4,
+            hostIpv6: host.ipv6,
+            hostEthernetAddress: host.ethernetAddress,
+            hypervisorFreeMemory: host.hypervisorFreeMemory,
+            hypervisorFreeMemoryMiB: host.hypervisorFreeMemoryMiB,
+          };
+          printPre(
+            escapeHtml(
+              JSON.stringify(payload, null, output === "json-pretty" ? 2 : 0),
+            ),
+          );
+          return true;
+        }
+
+        if (output === "yaml") {
+          const yaml = [
+            `hostUuid: ${host.uuid}`,
+            `hostDomain: ${host.domain}`,
+            `protectVersion: ${host.version}`,
+            `protectBuiltFromBranch: ${host.branch}`,
+            `protectLastTag: ${host.lastTag}`,
+            `protectRevisionsSinceTag: ${host.revisionsSinceTag}`,
+            `protectGitSha1: ${host.gitSha1}`,
+            `hostIpv4: ${host.ipv4}`,
+            `hostIpv6: ${host.ipv6}`,
+            `hostEthernetAddress: ${host.ethernetAddress}`,
+            `hypervisorFreeMemory: ${host.hypervisorFreeMemory}`,
+            `hypervisorFreeMemoryMiB: ${host.hypervisorFreeMemoryMiB}`,
+          ].join("\n");
+          printPre(`<span style="color:#dff7f0;">${escapeHtml(yaml)}</span>`);
+          return true;
+        }
+
+        if (output === "key-value") {
+          const keyValue = [
+            `hostUuid=${host.uuid}`,
+            `hostDomain=${host.domain}`,
+            `protectVersion=${host.version}`,
+            `protectBuiltFromBranch=${host.branch}`,
+            `protectLastTag=${host.lastTag}`,
+            `protectRevisionsSinceTag=${host.revisionsSinceTag}`,
+            `protectGitSha1=${host.gitSha1}`,
+            `hostIpv4=${host.ipv4}`,
+            `hostIpv6=${host.ipv6}`,
+            `hostEthernetAddress=${host.ethernetAddress}`,
+            `hypervisorFreeMemory=${host.hypervisorFreeMemory}`,
+            `hypervisorFreeMemoryMiB=${host.hypervisorFreeMemoryMiB}`,
+          ].join("\n");
+          printPre(`<span style="color:#dff7f0;">${escapeHtml(keyValue)}</span>`);
+          return true;
+        }
+
+        // The default `simple` output is the format shown by the real terminal.
+        // `table` and `tree` are accepted by the CLI help but do not add useful
+        // structure to this flat host-status record, so they use the same data.
+        printPre(`<span style="color:#dff7f0;">${escapeHtml(simple)}</span>`);
         return true;
       }
       if (subcommand === "cpu-topology") {
