@@ -1133,6 +1133,146 @@ vfio_pci`;
     hypervisorFreeMemoryMiB: 3088,
   } as const;
 
+  // Reference output captured from the real Protect host. The simulation uses
+  // these values for the host-oriented diagnostics so the terminal experience
+  // matches the real CLI instead of returning a simplified placeholder.
+  const PROTECT_CPU_TOPOLOGY = `┌────┬──────┬────────┬──────┬────────┬──────────┐
+│ id ┆ node ┆ socket ┆ core ┆ thread ┆ class    │
+╞════╪══════╪════════╪══════╪════════╪══════════╡
+│ 0  ┆ 0    ┆ 0      ┆ 0    ┆ 0      ┆ Standard │
+│ 1  ┆ 0    ┆ 0      ┆ 0    ┆ 1      ┆ Standard │
+└────┴──────┴────────┴──────┴────────┴──────────┘`;
+
+  const PROTECT_ZONE_BOOT_LOGS = `[2026-09-15T12:49:50.462957Z INFO  edera_protect_zone::idm_ring] IDM ring protect-idm-control: session attached (port=23, pages=21)
+[2026-09-15T12:49:50.492670Z INFO  edera_protect_zone::idm_ring] IDM ring protect-idm-bulk: session attached (port=24, pages=261)
+[2026-09-15T12:49:54.556066Z INFO  edera_protect_zone::memory_pressure] starting zone memory pressure event monitor`;
+
+  const buildProtectHvDebugInfo = () => {
+    const activeZones = protectZones.filter(
+      (zone) => zone.state !== "destroyed",
+    );
+
+    const domains = activeZones.map((zone, index) => ({
+      arch: {
+        emulation_flags: 0,
+        misc_flags: 0,
+      },
+      cpu_time: 0,
+      cpupool: 0,
+      domid: zone.domid ?? index + 1,
+      flags: 4294901776,
+      gpaddr_bits: 46,
+      handle: [],
+      max_pages: 263168,
+      max_vcpu_id: 1,
+      number_online_vcpus: 2,
+      outstanding_pages: 0,
+      paged_pages: 0,
+      shared_info_frame: 0,
+      shr_pages: 0,
+      ssidref: 0,
+      total_pages: 131072,
+      vcpu_affinity: [
+        { hard: [0, 1], soft: [0, 1], vcpu: 0 },
+        { hard: [0, 1], soft: [0, 1], vcpu: 1 },
+      ],
+      protect: {
+        name: zone.name,
+        uuid: zone.uuid,
+        zone: {},
+      },
+    }));
+
+    return {
+      domains: [
+        {
+          arch: { emulation_flags: 256, misc_flags: 0 },
+          cpu_time: 0,
+          cpupool: 0,
+          domid: 0,
+          flags: 4294901792,
+          gpaddr_bits: 46,
+          handle: [],
+          max_pages: 2097152,
+          max_vcpu_id: 1,
+          number_online_vcpus: 2,
+          outstanding_pages: 0,
+          paged_pages: 0,
+          shared_info_frame: 0,
+          shr_pages: 0,
+          ssidref: 0,
+          total_pages: 970131,
+          vcpu_affinity: [
+            { hard: [0], soft: [0, 1], vcpu: 0 },
+            { hard: [1], soft: [0, 1], vcpu: 1 },
+          ],
+        },
+        ...domains,
+      ],
+      memmap: [
+        { addr: 0, size: 655360, type: 1 },
+        { addr: 1048576, size: 3149717504, type: 1 },
+        { addr: 3150766080, size: 2621440, type: 2 },
+        { addr: 3153387520, size: 65536, type: 3 },
+        { addr: 3153453056, size: 524288, type: 4 },
+        { addr: 3153977344, size: 66707456, type: 1 },
+        { addr: 3220684800, size: 540672, type: 2 },
+        { addr: 4294967296, size: 5154799616, type: 1 },
+      ],
+      numa: {
+        distance: [10],
+        nodes: [{ memfree_pages: 3238346752, memsize_pages: 9449766912 }],
+      },
+      pci_devices: [],
+      physinfo: {
+        arch_capabilities: 0,
+        capabilities: 786,
+        cores_per_socket: 1,
+        cpu_khz: 2499985,
+        free_pages: 790612,
+        hw_cap: [529267711, 4160369155, 739248128, 289, 15, 3500099499, 8, 256],
+        max_cpu_id: 1,
+        max_mfn: 2307071,
+        max_node_id: 63,
+        nr_cpus: 2,
+        nr_nodes: 1,
+        outstanding_pages: 0,
+        scrub_pages: 0,
+        threads_per_core: 2,
+        total_pages: 2043916,
+      },
+      xenstore: {
+        local: {
+          domain: Object.fromEntries(
+            activeZones.map((zone) => [
+              String(zone.domid ?? 1),
+              {
+                attr: {},
+                domid: String(zone.domid ?? 1),
+                name: `protect-${zone.uuid}`,
+                protect: {
+                  name: zone.name,
+                  uuid: zone.uuid,
+                  zone: {},
+                },
+                type: "PV",
+                uuid: zone.uuid,
+                "vz-type": "pv",
+              },
+            ]),
+          ),
+        },
+        tool: { xenstored: {} },
+        vm: Object.fromEntries(
+          activeZones.map((zone) => [
+            zone.uuid,
+            { uuid: zone.uuid },
+          ]),
+        ),
+      },
+    };
+  };
+
   // Xen domain ids are handed out sequentially and never reused, so this is a
   // monotonic counter rather than `protectZones.length`.
   let nextProtectDomid = 1;
@@ -3970,29 +4110,44 @@ Options:
           return true;
         }
 
-        if (zone.name !== "zone-gpu" || zone.kernelVariant !== "nvidia") {
-          printHtml(
-            `<span style="color:#a8cfca;">No NVIDIA driver logs are available for zone "${escapeHtml(
-              zone.name,
-            )}".</span>`,
+        // The reference terminal exposes normal zone boot/runtime logs for a
+        // regular zone when --follow is used. Preserve the existing NVIDIA
+        // behavior for the GPU demo zone, but provide the reference-style IDM
+        // and memory-pressure logs for ordinary zones as well.
+        const follows = tokens.includes("--follow") || tokens.includes("-f");
+
+        if (zone.name === "zone-gpu" && zone.kernelVariant === "nvidia") {
+          printPre(
+            `<span style="color:#dff7f0;">${escapeHtml(
+              NVIDIA_ZONE_LOGS,
+            )}</span>`,
           );
+
+          addEvent(
+            "Normal",
+            "NvidiaDriverVerified",
+            `zone/${zone.name}`,
+            "NVIDIA driver initialized successfully",
+          );
+
+          markDemoStepComplete("gpu-zone-logs");
           return true;
         }
 
         printPre(
           `<span style="color:#dff7f0;">${escapeHtml(
-            NVIDIA_ZONE_LOGS,
+            PROTECT_ZONE_BOOT_LOGS,
           )}</span>`,
         );
 
-        addEvent(
-          "Normal",
-          "NvidiaDriverVerified",
-          `zone/${zone.name}`,
-          "NVIDIA driver initialized successfully",
-        );
+        if (follows) {
+          printHtml(
+            `<span style="color:#a8cfca;">Following logs for zone "${escapeHtml(
+              zone.name,
+            )}" (simulated).</span>`,
+          );
+        }
 
-        markDemoStepComplete("gpu-zone-logs");
         return true;
       }
 
@@ -4462,19 +4617,44 @@ Options:
         return true;
       }
       if (subcommand === "cpu-topology") {
-        printPre(`<span style="color:#dff7f0;">CPU TOPOLOGY
-Sockets: 1
-Cores:   4
-Threads: 8
+        const output = parseProtectOutputFormat(tokens);
 
-0 1 2 3 4 5 6 7</span>`);
+        if (output === "json" || output === "json-pretty") {
+          const topology = {
+            sockets: 1,
+            cores: 1,
+            threads: 2,
+            cpus: [
+              { id: 0, node: 0, socket: 0, core: 0, thread: 0, class: "Standard" },
+              { id: 1, node: 0, socket: 0, core: 0, thread: 1, class: "Standard" },
+            ],
+          };
+          printPre(
+            escapeHtml(
+              JSON.stringify(topology, null, output === "json-pretty" ? 2 : 0),
+            ),
+          );
+          return true;
+        }
+
+        printPre(
+          `<span style="color:#dff7f0;">CPU TOPOLOGY\n${escapeHtml(
+            PROTECT_CPU_TOPOLOGY,
+          )}</span>`,
+        );
         return true;
       }
+
       if (subcommand === "hv-debug-info") {
-        printPre(`<span style="color:#dff7f0;">Hypervisor: simulated-kvm
-Edera isolation: enabled
-Zones: ${protectZones.filter((zone) => zone.state !== "destroyed").length}
-Kernel isolation: enabled</span>`);
+        // The real command returns the hypervisor/Xen debug structure as JSON,
+        // rather than a short daemon summary. Keep the same top-level shape and
+        // populate the simulated domains from the zones currently in Webernetes.
+        const hvDebugInfo = buildProtectHvDebugInfo();
+        printPre(
+          `<span style="color:#dff7f0;">${escapeHtml(
+            JSON.stringify(hvDebugInfo),
+          )}</span>`,
+        );
         return true;
       }
       printHtml(`<span style="color:#ff7373;">Unknown protect host command: ${escapeHtml(tokens.slice(2).join(" "))}</span>`);
