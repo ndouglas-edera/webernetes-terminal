@@ -1028,6 +1028,7 @@ vfio_pci`;
     { name: "kube-system", status: "Active", age: "10m" },
     { name: "kube-public", status: "Active", age: "10m" },
     { name: "kube-node-lease", status: "Active", age: "10m" },
+    { name: "falco", status: "Active", age: "2m" },
   ];
 
   let deployments: LocalDeployment[] = [];
@@ -1045,6 +1046,18 @@ vfio_pci`;
       ip: "10.244.0.5",
       node: "node-2",
       labels: { app: "demo" },
+    },
+    {
+      name: "falco-edera-node-7d8f9",
+      namespace: "falco",
+      status: "Running",
+      age: "2m",
+      image: "falcosecurity/falco:latest",
+      ip: "10.244.0.6",
+      node: "node-1",
+      labels: {
+        "app.kubernetes.io/name": "falco",
+      },
     },
   ];
 
@@ -5824,6 +5837,10 @@ Options:
 
         printPre(html.trimEnd());
 
+        if (namespaceFilter === "falco" && filtered.some((pod) => pod.namespace === "falco")) {
+          markDemoStepComplete("falco-pods");
+        }
+
         return true;
       }
 
@@ -7335,15 +7352,6 @@ Options:
           return;
         }
         if (tokens[0] === "kubectl") {
-          if (tokens[1] === "get" && tokens[2] === "pods" && tokens.includes("-n") && tokens[tokens.indexOf("-n") + 1] === "falco") {
-            printPre(
-              `<span style="color:#dff7f0;">NAME                                      READY   STATUS    RESTARTS   AGE
-falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`,
-            );
-            markDemoStepComplete("falco-pods");
-            return;
-          }
-
           if (tokens[1] === "logs" && tokens.includes("-n") && tokens[tokens.indexOf("-n") + 1] === "falco") {
             falcoInstalled = true;
             falcoRunning = true;
