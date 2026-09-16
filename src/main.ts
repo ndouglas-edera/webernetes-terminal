@@ -6478,12 +6478,34 @@ Options:
       (tokens[2] === "pod" ||
         tokens[2] === "pods")
     ) {
-      const podName = tokens[3];
+      let requestedNamespace = "default";
+      let podName = "";
+
+      // kubectl accepts namespace flags before or after the pod name:
+      // `kubectl delete pod -n falco <name>`
+      // `kubectl delete pod <name> -n falco`
+      for (let i = 3; i < tokens.length; i++) {
+        if (tokens[i] === "-n" || tokens[i] === "--namespace") {
+          requestedNamespace = tokens[++i] || requestedNamespace;
+        } else if (tokens[i].startsWith("--namespace=")) {
+          requestedNamespace =
+            tokens[i].split("=")[1] || requestedNamespace;
+        } else if (!tokens[i].startsWith("-") && !podName) {
+          podName = tokens[i];
+        }
+      }
+
+      if (!podName) {
+        printHtml(
+          `<span style="color:#ff7373;">Usage: kubectl delete pod <name> [-n namespace]</span>`,
+        );
+        return true;
+      }
 
       const index = pods.findIndex(
         (pod) =>
           pod.name === podName &&
-          pod.namespace === "default",
+          pod.namespace === requestedNamespace,
       );
 
       if (index === -1) {
