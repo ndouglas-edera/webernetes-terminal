@@ -5294,14 +5294,22 @@ Options:
     }
     if (tokens[1] === "describe") {
       const resource = tokens[2];
-      const name = tokens[3];
       let requestedNamespace = "default";
+      let name = "";
 
-      for (let i = 4; i < tokens.length; i++) {
+      // kubectl accepts namespace flags before or after the resource name, e.g.
+      // `kubectl describe pod -n falco falco-edera-node-7d8f9` and
+      // `kubectl describe pod falco-edera-node-7d8f9 -n falco`.
+      // Find the first positional argument after the resource while consuming
+      // namespace flag values so the simulated command behaves the same way.
+      for (let i = 3; i < tokens.length; i++) {
         if (tokens[i] === "-n" || tokens[i] === "--namespace") {
           requestedNamespace = tokens[++i] || requestedNamespace;
         } else if (tokens[i].startsWith("--namespace=")) {
           requestedNamespace = tokens[i].split("=")[1] || requestedNamespace;
+        } else if (!tokens[i].startsWith("-")) {
+          name = tokens[i];
+          break;
         }
       }
 
@@ -5314,7 +5322,8 @@ Options:
 
       if (resource === "pod" || resource === "pods") {
         const pod = pods.find(
-          (item) => item.name === name && item.namespace === "default",
+          (item) =>
+            item.name === name && item.namespace === requestedNamespace,
         );
 
         if (!pod) {
