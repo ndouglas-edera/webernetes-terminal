@@ -3011,11 +3011,6 @@ vfio_pci`;
           <div class="cli-help-section-title">Utilities</div>
 
           <div class="cli-help-command">
-            <code>curl &lt;url&gt;</code>
-            <span>Send a simulated HTTP GET request through the cluster.</span>
-          </div>
-
-          <div class="cli-help-command">
             <code>ls -laR [directory]</code>
             <span>Recursively list files and directories with permissions and hidden entries.</span>
           </div>
@@ -7367,56 +7362,6 @@ falco-edera-node-7d8f9                   1/1     Running   0          2m</span>`
           if (handled) {
             return;
           }
-        }
-        if (tokens[0] === "curl") {
-          const url = rawCmd
-            .replace(/^curl\s+/, "")
-            .trim();
-
-          addEvent(
-            "Info",
-            "HttpRequest",
-            "curl",
-            `GET ${url}`,
-          );
-
-          try {
-            const response: any =
-              await cluster.fetch(url);
-
-            const text =
-              typeof response?.text === "function"
-                ? await response.text()
-                : response?.body || response;
-
-            printHtml(
-              `<span style="color:#dff7f0;">${escapeHtml(
-                String(text),
-              )}</span>`,
-            );
-
-            addEvent(
-              "Normal",
-              "HttpResponse",
-              "curl",
-              `200 OK from ${url}`,
-            );
-          } catch (error: any) {
-            printHtml(
-              `<span style="color:#ff7373;">curl: (7) Failed to connect: ${escapeHtml(
-                error?.message || String(error),
-              )}</span>`,
-            );
-
-            addEvent(
-              "Warning",
-              "HttpError",
-              "curl",
-              `Connection failed`,
-            );
-          }
-
-          return;
         }
         printHtml(
           `<span style="color:#ff7373;">command not found: ${escapeHtml(
